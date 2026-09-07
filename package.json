@@ -21,6 +21,7 @@
     "LICENSE",
     "SECURITY.md",
     "CONTRIBUTING.md",
+    "docs/assets",
     "docs/contract.md",
     "docs/integrations.md",
     "docs/verification.md"

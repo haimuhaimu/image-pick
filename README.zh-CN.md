@@ -16,6 +16,34 @@ ImagePick 把一个图片文件夹变成专注的本地选片空间。查看完�
 
 <p align="center"><strong>图片 + album.json → 本机选片 → 提交回执 → Agent 精确读取</strong></p>
 
+## 先看看实际界面
+
+<p align="center">
+  <img src="./docs/assets/imagepick-desktop.png" alt="ImagePick 桌面选片界面，同时对照参考图和候选图" width="100%">
+</p>
+
+桌面界面会把参考图、候选图、选片按钮、备注和整组缩略图放在同一视野中。截图只使用仓库自动生成的几何演示图片。
+
+<details>
+  <summary><strong>查看窄屏／手机布局</strong></summary>
+  <br>
+  <p align="center">
+    <img src="./docs/assets/imagepick-mobile.png" alt="ImagePick 深色窄屏选片界面" width="390">
+  </p>
+</details>
+
+## 怎么和 Agent 一起使用
+
+先对 Agent 说：
+
+> 用 ImagePick 打开这批图片，让我对照和选片。
+
+Agent 会准备相册并给你一个本机地址。完成评选、点击**提交评价**之后，再说：
+
+> 我评估完了。读取 ImagePick 回执，告诉我哪些保留、哪些返修、哪些淘汰。
+
+ImagePick 只负责准确传递你的判断；除非你另行要求，否则它不会生成替代图片、删除淘汰稿或发布任何内容。
+
 ## 为什么用 ImagePick
 
 | 看清作品 | 保留判断 | 准确交接 |

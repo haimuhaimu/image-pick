@@ -16,6 +16,34 @@ ImagePick turns a folder of images into a focused review room. Inspect full fram
 
 <p align="center"><strong>Images + album.json → Review locally → Submit a receipt → Agent reads exact feedback</strong></p>
 
+## See it before you run it
+
+<p align="center">
+  <img src="./docs/assets/imagepick-desktop.png" alt="ImagePick desktop review screen comparing a reference and a candidate" width="100%">
+</p>
+
+The desktop workspace keeps the reference, candidate, selection controls, notes and the whole batch visible together. The screenshots use only the repository's generated geometric demo.
+
+<details>
+  <summary><strong>View the narrow-screen layout</strong></summary>
+  <br>
+  <p align="center">
+    <img src="./docs/assets/imagepick-mobile.png" alt="ImagePick narrow-screen review layout in dark mode" width="390">
+  </p>
+</details>
+
+## How to use it with an agent
+
+Ask your agent:
+
+> Open this image batch in ImagePick so I can compare and review it.
+
+The agent prepares the album and gives you a local URL. Review the images, click **提交评价**, then say:
+
+> I have finished reviewing. Read the ImagePick receipt and summarize what to keep, rework and reject.
+
+ImagePick transports your decisions; it does not generate replacements, delete rejected files or publish anything unless you separately ask the agent to do so.
+
 ## Why ImagePick
 
 | See the actual work | Preserve the decision | Hand off without ambiguity |
