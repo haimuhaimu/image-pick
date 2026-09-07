@@ -1,0 +1,49 @@
+{
+  "name": "image-pick",
+  "version": "0.1.0",
+  "description": "Local-first image selection and structured feedback for AI agents.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "image-pick": "bin/image-pick.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "web",
+    "skills",
+    "scripts/demo.mjs",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "docs/contract.md",
+    "docs/integrations.md",
+    "docs/verification.md"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test",
+    "demo": "node scripts/demo.mjs && node bin/image-pick.mjs serve .image-pick/demo/album.json",
+    "check": "npm test && npm run test:browser"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/haimuhaimu/image-pick.git"
+  },
+  "keywords": [
+    "image-review",
+    "photo-selection",
+    "agent-skills",
+    "codex",
+    "deepseek-harness",
+    "local-first"
+  ],
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

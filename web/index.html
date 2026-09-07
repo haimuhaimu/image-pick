@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="本地优先的选片台：完整大图、参照对比和可回收的人类评价。">
+  <title>ImagePick · 选片台</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <div class="album" id="album">
+    <header class="topbar">
+      <div class="identity"><h1>ImagePick <span>选片台</span></h1><span id="albumTitle">正在打开相册…</span></div>
+      <div class="top-actions">
+        <button id="overviewButton" disabled>总览 <span id="totalCount">0</span></button>
+        <button id="themeButton" class="quiet" aria-label="切换明暗外观">明暗</button>
+        <button id="exportButton" class="quiet" disabled>导出草稿</button>
+        <button id="submitButton" class="primary" disabled>提交评价</button>
+      </div>
+    </header>
+    <div class="submission-bar"><p id="submissionStatus" role="status">尚未提交 · 评价不会修改原图或正式精选记录。</p></div>
+
+    <main class="workspace">
+      <section class="viewer" aria-label="图片查看器">
+        <div class="viewer-toolbar">
+          <div class="view-modes" role="group" aria-label="查看方式">
+            <button id="singleButton" aria-pressed="true">单张</button>
+            <button id="compareButton" aria-pressed="false" disabled>参照对比</button>
+          </div>
+          <div class="zoom-controls">
+            <button id="faceButton" disabled title="查看图片标注的局部区域">局部</button>
+            <button id="fitButton" disabled>完整</button>
+            <span class="toolbar-divider"></span>
+            <button id="zoomOut" aria-label="缩小" disabled>−</button>
+            <output id="zoomValue" aria-label="缩放比例">1×</output>
+            <button id="zoomIn" aria-label="放大" disabled>＋</button>
+            <button id="focusButton" class="focus-toggle" aria-pressed="false">专注</button>
+          </div>
+        </div>
+        <div class="stage-area" id="stageArea">
+          <div class="photo-panes" id="photoPanes">
+            <figure class="photo-pane" id="referencePane" hidden>
+              <figcaption id="referenceCaption">参照</figcaption>
+              <div class="image-viewport" id="referenceViewport" tabindex="0" aria-label="参照图片，可缩放和拖动">
+                <img id="referenceImage" alt="" draggable="false">
+                <div class="image-message" role="status"></div>
+              </div>
+            </figure>
+            <figure class="photo-pane" id="currentPane">
+              <figcaption id="currentCaption">当前图片</figcaption>
+              <div class="image-viewport" id="currentViewport" tabindex="0" aria-label="当前图片，可缩放和拖动">
+                <img id="currentImage" alt="" draggable="false" fetchpriority="high">
+                <div class="image-message" role="status">正在打开原图…</div>
+              </div>
+            </figure>
+          </div>
+          <div id="emptyState" class="empty-state" hidden><h2>没有符合筛选的图片</h2><p>可以更换分组或标记条件。</p><button id="clearFilters">查看全部图片</button></div>
+          <div id="fatalError" class="empty-state" role="alert" hidden><h2>相册暂时无法打开</h2><p id="fatalText"></p><button id="retryButton">重新连接</button></div>
+        </div>
+        <div class="viewer-footer"><button id="previousButton" aria-label="上一张图片" disabled>← 上一张</button><span id="position" aria-live="polite">正在载入</span><button id="nextButton" aria-label="下一张图片" disabled>下一张 →</button></div>
+      </section>
+
+      <aside class="review-panel" aria-label="选片和备注">
+        <div class="photo-heading"><span id="photoCode" class="photo-code"></span><h2 id="photoTitle">正在载入图片</h2><p id="photoMeta" class="muted"></p></div>
+        <div class="review-section">
+          <h3>这张怎么样？</h3>
+          <div class="verdict-buttons" role="group" aria-label="本次选片标记">
+            <button data-verdict="selected" aria-pressed="false" disabled>精选 <kbd>1</kbd></button>
+            <button data-verdict="rework" aria-pressed="false" disabled>返修 <kbd>2</kbd></button>
+            <button data-verdict="reject" aria-pressed="false" disabled>淘汰 <kbd>3</kbd></button>
+          </div>
+          <div class="review-state"><span id="verdictText">本次未标记</span><button id="clearVerdict" class="text-button" hidden>撤销标记</button></div>
+        </div>
+        <div class="note-field">
+          <div class="note-label"><label for="note">备注</label><span id="noteCount">0 / 4000</span></div>
+          <textarea id="note" rows="4" aria-describedby="noteCount saveStatus" placeholder="喜欢哪里？哪些细节需要调整？" disabled></textarea>
+          <p id="saveStatus" class="save-status" role="status">草稿仅保存在当前浏览器；提交后保存独立回执。</p>
+        </div>
+        <div id="conflictBanner" class="conflict-banner" role="alert" hidden>
+          <p id="conflictText">另一标签页有不同草稿。本页内容已保留，未自动覆盖；请先导出备份。</p>
+          <button id="conflictExport">导出本页备份</button>
+          <button id="keepLocal">保留本页草稿</button>
+          <button id="useExternal">使用另一页草稿</button>
+        </div>
+        <div class="source-info"><span id="baselineLabel"></span><p>来源记录与本次评价分开保存。提交的是当前整组快照，未标记也会保留为空。不同标签页的提交是独立回执，不会自动合并。</p></div>
+        <a id="downloadImage" class="download-link" href="#" download hidden>保存这张原图 ↗</a>
+        <details class="help"><summary>快捷键与保存说明</summary><p>← → 切换图片<br>滚轮缩放，放大后拖动<br>F 局部，0 完整，C 对比<br>1 精选，2 返修，3 淘汰<br>Esc 退出专注或对比<br><br>浏览器草稿并非提交回执。重要编辑请提交或导出；清除网站数据会删除浏览器草稿。局部按钮仅在图片含区域标注时可用。</p></details>
+      </aside>
+    </main>
+
+    <section class="film-section" aria-label="图片列表">
+      <div class="film-toolbar"><div id="groupTabs" class="group-tabs" role="group" aria-label="图片分组"></div><label class="filter-label">本次标记 <select id="statusFilter" disabled><option value="all">全部标记</option><option value="unreviewed">未标记</option><option value="selected">精选</option><option value="rework">返修</option><option value="reject">淘汰</option></select></label></div>
+      <div class="filmstrip" id="filmstrip"></div>
+    </section>
+  </div>
+  <dialog id="overview" aria-labelledby="overviewTitle"><div class="dialog-header"><div><h2 id="overviewTitle">图片总览</h2><p>选择图片，回到大图查看。</p></div><button id="closeOverview">关闭</button></div><div id="overviewGrid" class="overview-grid"></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <noscript><p>选片台需要 JavaScript 才能查看图片和保存评价。</p></noscript>
+</body>
+</html>

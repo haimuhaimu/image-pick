@@ -1,0 +1,6 @@
+interface:
+  display_name: "ImagePick · 选片台"
+  short_description: "Review images and collect human feedback"
+  default_prompt: "Use $image-pick to prepare a local image review album and collect my submitted feedback."
+policy:
+  allow_implicit_invocation: true
