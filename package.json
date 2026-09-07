@@ -1,7 +1,7 @@
 {
   "name": "image-pick",
   "version": "0.1.0",
-  "description": "Local-first image selection and structured feedback for AI agents.",
+  "description": "A local-first visual review checkpoint for AI agents.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -39,6 +39,8 @@
   "keywords": [
     "image-review",
     "photo-selection",
+    "visual-feedback",
+    "human-in-the-loop",
     "agent-skills",
     "codex",
     "deepseek-harness",

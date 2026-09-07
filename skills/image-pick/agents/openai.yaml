@@ -1,6 +1,9 @@
 interface:
-  display_name: "ImagePick · 选片台"
-  short_description: "Review images and collect human feedback"
-  default_prompt: "Use $image-pick to prepare a local image review album and collect my submitted feedback."
+  display_name: "ImagePick"
+  short_description: "Human review for AI-generated image batches"
+  icon_small: "./assets/icon-small.png"
+  icon_large: "./assets/icon-large.png"
+  brand_color: "#4F6EA8"
+  default_prompt: "Use $image-pick to open this image batch for my review, then collect my submitted feedback."
 policy:
   allow_implicit_invocation: true
