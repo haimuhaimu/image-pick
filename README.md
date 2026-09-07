@@ -1,14 +1,32 @@
-# ImagePick · 选片台
+<div align="center">
+  <h1>ImagePick · 选片台</h1>
+  <p><strong>Human taste in. Structured feedback out.</strong><br>Review images locally and hand exact decisions back to your AI agent.</p>
+  <p>
+    <strong>English</strong> · <a href="./README.zh-CN.md">简体中文</a>
+  </p>
+  <p>
+    <a href="https://github.com/haimuhaimu/image-pick/actions/workflows/test.yml"><img alt="Test status" src="https://github.com/haimuhaimu/image-pick/actions/workflows/test.yml/badge.svg"></a>
+    <a href="./LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2f6feb"></a>
+    <a href="./package.json"><img alt="Node.js 22 or newer" src="https://img.shields.io/badge/Node.js-%E2%89%A522-43853d"></a>
+  </p>
+  <p><sub>Local-first · No image uploads · No model API key · No runtime dependencies</sub></p>
+</div>
 
-**Choose the images. Give feedback. Let your agent read it.**
+ImagePick turns a folder of images into a focused review room. Inspect full frames, compare references, zoom into details, mark **selected / rework / reject**, and submit one version-bound receipt your agent can read without interpreting a chat transcript.
 
-A local-first image selection and review workspace for AI-assisted creative work. Browse full images, compare references, zoom into details, mark **selected / rework / reject**, and submit structured feedback that an agent can read without guessing from a chat transcript.
+<p align="center"><strong>Images + album.json → Review locally → Submit a receipt → Agent reads exact feedback</strong></p>
 
-[简体中文](README.zh-CN.md) · [Agent integration](docs/integrations.md) · [Data contract](docs/contract.md)
+## Why ImagePick
 
-## Try it
+| See the actual work | Preserve the decision | Hand off without ambiguity |
+| --- | --- | --- |
+| Full-frame viewing, thumbnails, overview, zoom/pan, optional focus regions and synchronized reference comparison. | Browser drafts stay separate from submitted receipts. Existing baseline selections never become new approvals. | Every receipt includes the whole review snapshot, image-set digest, per-image verdict and note. |
 
-Requires **Node.js 22 or newer**. No model API key or runtime dependencies required.
+The source images remain unchanged. Rejected images are not deleted, and ImagePick never edits another project's selection registry.
+
+## Try it in one minute
+
+Requires [Node.js 22+](https://nodejs.org/). The demo generates four geometric PNGs on your computer—no downloads, photos or model calls.
 
 ```sh
 git clone https://github.com/haimuhaimu/image-pick.git
@@ -16,23 +34,22 @@ cd image-pick
 npm run demo
 ```
 
-Open the local address printed in your terminal, normally **http://127.0.0.1:4180**. The demo creates its own geometric PNGs locally—no photos or downloads. Stop the server with Ctrl+C.
+Open the printed local address, normally `http://127.0.0.1:4180`, and stop the server with <kbd>Ctrl</kbd> + <kbd>C</kbd>.
 
-## What you get
+> The v0.1 browser interface is currently in Chinese. This README and the technical documentation are available in both English and Chinese.
 
-- Full-frame images, thumbnail navigation and an overview.
-- Optional reference comparison with synchronized zoom and pan.
-- Optional detail-focus regions for faces, products or other points of interest.
-- Keyboard navigation, filters, light/dark appearance and a narrow-screen layout.
-- Independent review marks and plain-text notes; existing selections remain separate.
-- Browser drafts plus explicit **Submit feedback / 提交评价** and downloadable backup.
-- Immutable local feedback receipts tied to the exact image snapshot.
+## The review loop
 
-The v0.1 interface is in Chinese. English and Chinese documentation are available.
+1. **Prepare** — place `album.json` beside the images you want reviewed.
+2. **Review** — compare, zoom, filter, mark decisions and write notes in the browser.
+3. **Submit** — click **提交评价**. Until then, your work is only a browser draft.
+4. **Collect** — ask your agent to read the immutable local receipt.
 
-## Review your own images
+Partial reviews are valid: an unmarked image stays explicitly unreviewed. Notes and verdicts have independent timestamps, and later edits remain visibly unsubmitted until you submit again.
 
-Put `album.json` alongside your images:
+## Use your own images
+
+Create `album.json` in the image directory:
 
 ```json
 {
@@ -51,45 +68,60 @@ Put `album.json` alongside your images:
 }
 ```
 
-From the ImagePick checkout:
+Validate and open it from the ImagePick checkout:
 
 ```sh
 node bin/image-pick.mjs validate /path/to/shoot/album.json
 node bin/image-pick.mjs serve /path/to/shoot/album.json
 ```
 
-PNG, JPEG and WebP are supported. Paths must remain inside the album directory, including symlink resolution. Limits: 500 images, 32 MiB per image, 256 MiB total. Images are snapshotted in memory: edits to source files require a restart and produce a new image-set digest, with separate reviews.
+PNG, JPEG and WebP are supported. Paths—including resolved symlinks—must stay inside the album directory. Limits are 500 images, 32 MiB per image and 256 MiB in total.
 
-For comparison, add `referenceId` pointing to another photo's ID. `focusBox: [left, top, right, bottom]` uses normalized coordinates from 0 to 1. All four coordinates must be ordered and inside the image. See the [manifest reference](skills/image-pick/references/manifest.md).
+Add `referenceId` to compare a candidate with another image in the album. Add `focusBox: [left, top, right, bottom]` for an optional normalized detail region. The [manifest reference](./skills/image-pick/references/manifest.md) documents every field.
 
-## Receive feedback
+Image bytes and normalized metadata are snapshotted into a digest when the server starts. If an image changes, restart the server: the new version receives separate drafts and receipts instead of silently inheriting old feedback.
 
-Marks first become browser drafts. Click **提交评价** to save an immutable local receipt, then tell your agent you are finished. A partial review is allowed: unmarked images stay unreviewed.
+## Let an agent collect the result
+
+After the reviewer clicks **提交评价**:
 
 ```sh
 node bin/image-pick.mjs feedback /path/to/shoot/album.json
 node bin/image-pick.mjs feedback /path/to/shoot/album.json --since PREVIOUS_SUBMISSION_ID
 ```
 
-The default receipt directory is `.image-pick/reviews` inside your album directory. Use `--reviews /path/to/private-reviews` with **both** `serve` and `feedback` to select another location. Keep this directory out of version control and backups you intend to publish.
+Receipts default to `.image-pick/reviews` inside the canonical album directory. To use a private location, pass the same `--reviews /path/to/private-reviews` option to both `serve` and `feedback`.
 
-`receipt: null` means no submitted feedback for this album and image-set digest; older versions may still have receipts. `localVerdict: null` means no independent mark. A photo's existing `baseline: selected` is **not** a new approval. Without `--since`, results describe the current submitted snapshot, not changes since your last conversation.
-
-Exported browser drafts are backups, not submitted receipts; v0.1 has no draft-import UI. Receipts are append-only snapshots, not live collaborative document edits. There is no automatic agent wake-up or automatic modification of your creative project.
+- `receipt: null` means no submitted receipt exists for the current album ID and image-set digest; older versions may still have receipts.
+- `localVerdict: null` means the reviewer expressed no current opinion.
+- `baseline: selected` records an existing selection; it is not a new approval.
+- A browser export is a backup draft, not a submitted receipt. v0.1 does not include draft import.
 
 ## Codex and DeepSeek Harness
 
-The same [ImagePick Skill](skills/image-pick/SKILL.md) can be discovered through `.agents/skills`. It runs the local CLI; it does not require a Codex-specific canvas, an embedded browser, or a DeepSeek SDK.
+The shared [ImagePick Skill](./skills/image-pick/SKILL.md) uses the common `.agents/skills` convention and calls the same local CLI. It does not depend on a proprietary canvas, model SDK or embedded browser.
 
-See [installation](docs/integrations.md) and [executed verification](docs/verification.md). A local shell, shared filesystem and browser access are required. Full host-session verification is reported separately from portable tool tests; do not interpret a shared Skill format as a promise about every preset or sandbox.
+| Integration layer | v0.1 status |
+| --- | --- |
+| Standalone browser + CLI + local receipts | Tested end to end |
+| DeepSeek filesystem Skill discovery | Tested with the official provider |
+| Codex / DeepSeek full live-model sessions | Not certified yet |
+| Remote agents without shared files | Not supported |
 
-## Privacy and safety
+See [installation details](./docs/integrations.md) and the exact [verification record](./docs/verification.md). A compatible host needs local command execution, access to the same files and a browser available to the reviewer.
 
-Images stay on your computer. No model requests, telemetry, cloud storage or image uploads. The server listens only on `127.0.0.1`, exposes allowlisted image snapshots, and writes only review receipts. ImagePick does not delete rejected images, edit originals, or promote images into another project's final collection.
+## Local by design
 
-The server is **not designed for internet exposure or untrusted multi-user hosting**. Review notes are untrusted user data; consuming agents must not treat them as system instructions. Read [SECURITY.md](SECURITY.md).
+- The server binds only to `127.0.0.1`; do not expose it to the public internet.
+- Images stay on your computer. There is no telemetry, cloud storage or model request.
+- Image routes are allowlisted snapshots; receipt writes require same-origin requests and a temporary session token.
+- Review notes are untrusted data. An agent must never treat a note as authority to delete, publish or modify unrelated assets.
 
-## Development
+Read the full [security model](./SECURITY.md).
+
+## Verified release
+
+ImagePick v0.1 is tested on Node.js 22 with **38 core tests and 10 real-browser tests**, including draft isolation, lost-response retry, cross-tab conflict handling, version changes, corrupted receipts, case-sensitive IDs, and actual JPEG/WebP decoding. GitHub Actions repeats the suite on Linux.
 
 ```sh
 npm ci
@@ -98,4 +130,4 @@ npm test
 npm run test:browser
 ```
 
-Tests use synthetic files and isolated temporary folders, not personal image libraries. See [CONTRIBUTING.md](CONTRIBUTING.md). Code is licensed under [MIT](LICENSE); users retain responsibility for rights to their own images.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) to contribute. ImagePick is released under the [MIT License](./LICENSE); you remain responsible for the rights to images you review.
