@@ -68,6 +68,10 @@ Open the printed local address, normally `http://127.0.0.1:4180`. Stop the serve
 
    > I have finished reviewing. Read the ImagePick receipt and summarize what to keep, rework, and reject.
 
+To continue a revision, click **交给 AI 继续** after submitting and paste the handoff into the same agent conversation. It pins the exact receipt and image digest. The agent must validate current file hashes before saving edits as a new version. Further feedback edits require another submission; historical receipts remain unchanged. This does not automatically start an agent or call a model.
+
+Run `npm run demo:handoff` for a separate synthetic source / previous / reference comparison demo with issue tags and the submitted-feedback handoff.
+
 The repository includes a reusable [ImagePick Skill](./skills/image-pick/SKILL.md) and a local CLI. A compatible harness needs local command execution, access to the same files, and a browser for the reviewer. ImagePick is not tied to a model SDK or proprietary canvas.
 
 ## What the review room gives you
@@ -78,6 +82,9 @@ The repository includes a reusable [ImagePick Skill](./skills/image-pick/SKILL.m
 - Notes and verdicts with independent timestamps
 - Browser drafts kept separate from submitted receipts
 - Immutable receipts bound to the album ID and exact image-set digest
+- Named source, previous-version and reference comparisons, with optional issue tags
+- Same-version draft import that fills untouched rows without overwriting edits or retries
+- Exact-receipt, image-hash-checked revision handoff instead of silently selecting the latest feedback
 
 Existing baseline selections remain visibly separate from new human feedback. Rejected images are never deleted, and source images are never modified.
 

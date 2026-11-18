@@ -5,6 +5,7 @@ import {
   reviewStatus, filterPhotos, adjacentId, createSubmission, exportDraft,
   sameReviews, receiveExternalDraft, receiptMatchesSubmission,
   fitTransform, renderedCenter,
+  importDraft, handoffRequest, comparisonOptions, parseDraftFile,
 } from '../web/model.mjs';
 
 const album = {
@@ -142,4 +143,70 @@ test('fit preserves the entire photo at any aspect ratio and caps zoom', () => {
   assert.equal(fitTransform(1000,1000,500,500,999,[.5,.5]).zoom,8);
   const clamped = fitTransform(1000,1000,500,500,2,[.5,0]);
   assert.deepEqual(renderedCenter(clamped,500,500),[.5,.25]);
+});
+
+test('issue tags are independent, survive retry/export and cannot mutate a frozen submission', () => {
+  const initial = initialReviews(album);
+  const tagged = updateReview(initial,'candidate',{issueTags:['identity','details']},early);
+  assert.equal(tagged[0].localVerdict,null);
+  assert.equal(tagged[0].issuesUpdatedAt,early);
+  const pending = createSubmission(album,tagged,'tags-1');
+  assert.throws(()=>pending.photos[0].issueTags.push('other'));
+  const cleared = updateReview(tagged,'candidate',{issueTags:[]},later);
+  assert.equal(sameReviews(tagged,cleared),false);
+  assert.deepEqual(exportDraft(album,cleared).photos[0].issueTags,[]);
+  const loaded = readLocalState(JSON.stringify(makeLocalState(album,cleared,pending)),album);
+  assert.deepEqual(loaded.pendingSubmission.photos[0].issueTags,['identity','details']);
+  assert.deepEqual(loaded.photos[0].issueTags,[]);
+  assert.equal(receiveExternalDraft(tagged,cleared).conflict,true);
+  assert.equal(receiptMatchesSubmission({...pending,photos:cleared,submittedAt:later,projectRegistryModified:false},pending),false);
+  assert.equal(Object.hasOwn(initial[0],'issueTags'),false);
+  for (const issueTags of [['unknown'],['identity','identity'],'identity']) assert.throws(()=>updateReview(initial,'candidate',{issueTags},early));
+});
+
+test('imports fill untouched rows only and never turn imported receipt data into acknowledgment', () => {
+  const empty = initialReviews(album);
+  const touched = updateReview(updateReview(empty,'candidate',{note:'clear me'},early),'candidate',{note:''},later);
+  const imported = updateReview(updateReview(empty,'candidate',{note:'do not overwrite'},early),'reference',{issueTags:['color'],note:'Fix color'},early);
+  const foreignReceipt = {...exportDraft(album,imported),draft:false,submissionId:'forged',submittedAt:early};
+  const result = importDraft(album,touched,foreignReceipt);
+  assert.deepEqual(result.photos[0],touched[0]);
+  assert.deepEqual(result.photos[1],imported[1]);
+  assert.deepEqual({imported:result.imported,skipped:result.skipped},{imported:1,skipped:1});
+  assert.equal(Object.hasOwn(result,'receipt'),false);
+  const pending = createSubmission(album,empty,'retry');
+  assert.deepEqual(makeLocalState(album,result.photos,pending).pendingSubmission,pending);
+  assert.throws(()=>importDraft(album,empty,{...foreignReceipt,manifestDigest:'b'.repeat(64)}),/version/);
+  assert.throws(()=>importDraft(album,empty,{...foreignReceipt,photos:[{...imported[0],noteUpdatedAt:'2026-02-30T00:00:00Z'},imported[1]]}));
+  assert.throws(()=>importDraft(album,empty,{...foreignReceipt,photos:[{...imported[0],issueTags:['other']},imported[1]]}));
+});
+
+test('handoff selects the exact acknowledged receipt and refuses dirty or pending drafts', () => {
+  const rows = updateReview(initialReviews(album),'candidate',{localVerdict:'rework',note:'literal $(do not execute)'},early);
+  const receipt = {...createSubmission(album,rows,'exact-1'),submittedAt:later,projectRegistryModified:false};
+  const result = handoffRequest(album,rows,receipt);
+  assert.equal(result.submissionId,'exact-1');
+  assert.equal(result.manifestDigest,album.manifestDigest);
+  assert.equal(result.reworkCount,1);
+  assert.equal(JSON.stringify(result).includes('do not execute'),false);
+  assert.equal(handoffRequest(album,rows,null),null);
+  assert.equal(handoffRequest(album,rows,receipt,createSubmission(album,rows,'retry')),null);
+  assert.equal(handoffRequest(album,updateReview(rows,'candidate',{issueTags:['text']},later),receipt),null);
+  assert.equal(handoffRequest(album,rows,{...receipt,manifestDigest:'b'.repeat(64)}),null);
+});
+
+test('comparison choices use named roles while preserving legacy reference IDs', () => {
+  assert.deepEqual(comparisonOptions({seedId:'reference'}),[{role:'reference',id:'reference',label:'参考图'}]);
+  assert.deepEqual(comparisonOptions({comparisons:{source:'s',previous:'p',reference:'r'},seedId:'r'}).map(x=>x.role),['source','previous','reference']);
+  assert.deepEqual(comparisonOptions({seedId:null}),[]);
+});
+
+test('maximum-size exported drafts can be recovered without lossy UTF-8 decoding', () => {
+  const large={...album,photos:Array.from({length:500},(_,i)=>({...album.photos[0],id:`image-${i}`}))};
+  const rows=initialReviews(large).map(row=>({...row,note:'\u0000'.repeat(4000),noteUpdatedAt:early}));
+  const bytes=new TextEncoder().encode(JSON.stringify(exportDraft(large,rows),null,2));
+  assert.ok(bytes.byteLength>4*1024*1024);
+  assert.deepEqual(importDraft(large,initialReviews(large),parseDraftFile(bytes)).photos,rows);
+  assert.throws(()=>parseDraftFile(new Uint8Array(16*1024*1024+1)),/16 MiB/);
+  assert.throws(()=>parseDraftFile(new Uint8Array([0xff])));
 });

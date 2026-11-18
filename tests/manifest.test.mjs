@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFile, symlink, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { fixture, png } from './fixtures.mjs';
 import { loadAlbum } from '../src/manifest.mjs';
 
@@ -10,7 +11,7 @@ test('normalizes public metadata without leaking filenames and snapshots actual 
   f.source.photos[0].referenceId = 'photo-4'; f.source.photos[0].focusBox = [0.1, 0.2, 0.8, 0.9];
   await f.writeManifest();
   const { album, images } = await loadAlbum(f.manifest);
-  assert.deepEqual(album.photos[0], { id: 'photo-1', code: 'photo-1', title: 'Photo 1', group: 'Images', baseline: 'candidate', seedId: 'photo-4', faceBox: [0.1, 0.2, 0.8, 0.9], width: 3, height: 3, mimeType: 'image/png', url: '/images/photo-1' });
+  assert.deepEqual(album.photos[0], { id: 'photo-1', code: 'photo-1', title: 'Photo 1', group: 'Images', baseline: 'candidate', seedId: 'photo-4', faceBox: [0.1, 0.2, 0.8, 0.9], width: 3, height: 3, mimeType: 'image/png', url: '/images/photo-1', sha256: createHash('sha256').update(png(3, 3, 30)).digest('hex') });
   assert.match(album.manifestDigest, /^[a-f0-9]{64}$/);
   assert.equal(JSON.stringify(album).includes(f.dir), false);
   const original = Buffer.from(images.get('photo-1').bytes);
@@ -18,6 +19,42 @@ test('normalizes public metadata without leaking filenames and snapshots actual 
   assert.deepEqual(images.get('photo-1').bytes, original);
   assert.notEqual((await loadAlbum(f.manifest)).album.manifestDigest, album.manifestDigest);
   assert.ok(Object.isFrozen(album.photos[0]));
+});
+
+test('keeps the pre-extension digest for a legacy album while exposing each content identity', async (t) => {
+  const f = await fixture(t, 1);
+  const { album } = await loadAlbum(f.manifest);
+  // Captured from v0.1 before adding comparisons or public content hashes.
+  assert.equal(album.manifestDigest, '1134dc1cec1e4a0665e414885054ac7b9c51db385c990ae4627aee5caf8812b1');
+  assert.equal(album.photos[0].sha256, createHash('sha256').update(png(3, 3, 30)).digest('hex'));
+  assert.equal(Object.hasOwn(album.photos[0], 'comparisons'), false);
+});
+
+test('binds comparison roles into the digest and keeps legacy references compatible', async (t) => {
+  const f = await fixture(t);
+  const original = (await loadAlbum(f.manifest)).album;
+  f.source.photos[0].comparisons = { previous: 'photo-3', source: 'photo-2', reference: 'photo-4' };
+  await f.writeManifest();
+  const first = (await loadAlbum(f.manifest)).album;
+  assert.deepEqual(first.photos[0].comparisons, { source: 'photo-2', previous: 'photo-3', reference: 'photo-4' });
+  assert.equal(first.photos[0].seedId, 'photo-4');
+  assert.notEqual(first.manifestDigest, original.manifestDigest);
+  assert.ok(Object.isFrozen(first.photos[0].comparisons));
+  f.source.photos[0].referenceId = 'photo-4';
+  f.source.photos[0].comparisons = { reference: 'photo-4', source: 'photo-2', previous: 'photo-3' };
+  await f.writeManifest();
+  assert.equal((await loadAlbum(f.manifest)).album.manifestDigest, first.manifestDigest);
+  f.source.photos[0].comparisons.previous = 'photo-2'; await f.writeManifest();
+  assert.notEqual((await loadAlbum(f.manifest)).album.manifestDigest, first.manifestDigest);
+});
+
+test('rejects invalid comparison roles, missing IDs, self references and contradictory legacy references', async (t) => {
+  const f = await fixture(t);
+  for (const comparisons of [null, [], 'photo-2', { unknown: 'photo-2' }, { source: 'missing' }, { previous: 'photo-1' }, { source: null }, { reference: 'photo-3' }]) {
+    f.source.photos[0].referenceId = 'photo-4'; f.source.photos[0].comparisons = comparisons;
+    await f.writeManifest();
+    await assert.rejects(loadAlbum(f.manifest), undefined, JSON.stringify(comparisons));
+  }
 });
 
 test('rejects escaped paths, symlinks outside the album, non-files and unsupported bytes', async (t) => {

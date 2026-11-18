@@ -1,4 +1,20 @@
-# v0.1 verification
+# Verification
+
+## Local feedback-handoff preview — 2026-11-18
+
+This is local verification of the extension, not a release or a current GitHub CI result. Tests used synthetic images and simulated review feedback only; no personal albums or historical user receipts were copied into fixtures.
+
+- Node.js 26.5.0 / macOS arm64: **54 unit/integration tests passed**. Includes a pre-extension golden album digest and serialized receipt, exact-receipt selection despite newer feedback, changed bytes under the same filename/ID/revision, malformed and symlinked receipts, tag-only edits, lost-response retry snapshots, and maximum-size exported draft recovery.
+- Playwright 1.63.0 / Chromium 153: **13 browser tests passed**. Includes actual browser submission → persisted receipt → CLI `handoff` with matching target/hash/note; dirty edits disabling handoff; clipboard-denied fallback; import preserving existing notes; import-driven navigation resetting zoom; and the original browser regression suite.
+- Rendered desktop (1440 × 960) and narrow (390 × 844) layouts inspected, including dark mode, reduced motion and browser-emulated touch. The local preview was also opened in the Codex in-app browser and its previous/current comparison inspected. This is not physical-phone certification.
+- Independent review found oversized valid backups rejected by the initial import limit and import-driven navigation retaining old zoom. Both were reproduced, fixed and regression-tested.
+- Independent agent reference checks found the old Skill lacked exact-receipt handoff/import guidance. With the updated reference, a fresh agent selected the exact receipt, refused stale-version fallback and kept imports as drafts. This was a scoped reference/CLI check, not automatic host discovery or a paid image-editing session.
+- The bundled Skill passed its frontmatter/structure validator. The validator's missing PyYAML dependency was installed only in a temporary validation directory, not in the project's runtime dependencies or system environment.
+- Package dry-run includes the new handoff module and excludes local demo data, receipts, tests and private verification outputs. No repository creation, commit, push, global Skill installation or publication was performed for this preview.
+
+Reproduce with `npm test`, `npm run test:browser`, then `npm run demo:handoff`. The original `npm run demo` still opens the original independent sample batch. Current-image editing is intentionally delegated to the user's chosen, separately authorized image tool; ImagePick itself does not generate or overwrite images.
+
+## Historical v0.1 verification
 
 Checked on 2026-09-07. This report separates portable tool behavior from host-model sessions. All fixtures are original geometric images and synthetic feedback; no personal libraries or real user reviews were used.
 

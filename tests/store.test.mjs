@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdir, readFile, stat, writeFile, symlink, unlink } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile, symlink, unlink, mkdir } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { fixture, submission } from './fixtures.mjs';
 import { loadAlbum } from '../src/manifest.mjs';
@@ -20,6 +20,48 @@ test('an absent receipt is empty feedback with baseline separate from local verd
   const feedback = await readFeedback(album, f.reviews);
   assert.deepEqual(feedback, { albumId: album.id, manifestDigest: album.manifestDigest, receipt: null,
     summary: { selected: 0, rework: 0, reject: 0, unreviewed: 4, baselineSelected: 1 }, changes: null });
+  await assert.rejects(stat(f.reviews), { code: 'ENOENT' });
+});
+
+test('reads and retries a pre-extension receipt without changing its bytes or optional fields', async (t) => {
+  const f = await fixture(t, 1); const { album } = await loadAlbum(f.manifest);
+  // Literal receipt captured before implementing the optional tag fields.
+  const legacy = '{"schemaVersion":1,"albumId":"test-album","manifestDigest":"1134dc1cec1e4a0665e414885054ac7b9c51db385c990ae4627aee5caf8812b1","submissionId":"legacy-snapshot","photos":[{"id":"photo-1","localVerdict":null,"note":"","statusUpdatedAt":null,"noteUpdatedAt":null,"baseline":"selected","title":"Photo 1"}],"revision":"1","submittedAt":"2026-09-07T00:00:00.000Z","projectRegistryModified":false}';
+  const dir = join(f.reviews, `id-${Buffer.from('test-album').toString('hex')}`, '1134dc1cec1e4a0665e414885054ac7b9c51db385c990ae4627aee5caf8812b1');
+  await mkdir(dir, { recursive: true });
+  const path = join(dir, `id-${Buffer.from('legacy-snapshot').toString('hex')}.json`);
+  await writeFile(path, legacy);
+  assert.deepEqual((await readFeedback(album, f.reviews)).receipt, JSON.parse(legacy));
+  assert.deepEqual(await saveReceipt(album, submission(album, 'legacy-snapshot'), f.reviews), JSON.parse(legacy));
+  assert.equal(await readFile(path, 'utf8'), legacy);
+});
+
+test('tags survive receipts and retries independently of verdicts and produce semantic differences', async (t) => {
+  const f = await fixture(t, 1); const { album } = await loadAlbum(f.manifest);
+  await saveReceipt(album, submission(album, 'before-tags'), f.reviews);
+  const request = submission(album, 'tagged');
+  Object.assign(request.photos[0], { issueTags: ['identity', 'details'], issuesUpdatedAt: '2026-11-18T01:00:00.000Z' });
+  const receipt = await saveReceipt(album, request, f.reviews);
+  assert.deepEqual(receipt.photos[0].issueTags, ['identity', 'details']);
+  assert.equal(receipt.photos[0].localVerdict, null);
+  assert.deepEqual(await saveReceipt(album, request, f.reviews), receipt);
+  assert.deepEqual((await readFeedback(album, f.reviews, 'before-tags')).changes, [{ id: 'photo-1', before: { localVerdict: null, note: '' }, after: { localVerdict: null, note: '', issueTags: ['identity', 'details'] } }]);
+  const timestampOnly = structuredClone(request); timestampOnly.submissionId = 'later-time'; timestampOnly.photos[0].issuesUpdatedAt = '2026-11-18T02:00:00.000Z';
+  await saveReceipt(album, timestampOnly, f.reviews);
+  assert.deepEqual((await readFeedback(album, f.reviews, 'tagged')).changes, []);
+  const cleared = structuredClone(timestampOnly); cleared.submissionId = 'cleared'; cleared.photos[0].issueTags = [];
+  await saveReceipt(album, cleared, f.reviews);
+  assert.deepEqual((await readFeedback(album, f.reviews, 'tagged')).changes[0].after.issueTags, []);
+  request.photos[0].issueTags = ['color'];
+  await assert.rejects(saveReceipt(album, request, f.reviews), { statusCode: 409 });
+});
+
+test('rejects malformed or incomplete tag fields before recording feedback', async (t) => {
+  const f = await fixture(t, 1); const { album } = await loadAlbum(f.manifest);
+  for (const fields of [{ issueTags: ['identity'] }, { issuesUpdatedAt: null }, { issueTags: 'identity', issuesUpdatedAt: null }, { issueTags: ['execute'], issuesUpdatedAt: null }, { issueTags: ['color', 'color'], issuesUpdatedAt: null }, { issueTags: [], issuesUpdatedAt: '2026-02-30T00:00:00.000Z' }]) {
+    const request = submission(album); Object.assign(request.photos[0], fields);
+    await assert.rejects(saveReceipt(album, request, f.reviews), { statusCode: 400 });
+  }
   await assert.rejects(stat(f.reviews), { code: 'ENOENT' });
 });
 

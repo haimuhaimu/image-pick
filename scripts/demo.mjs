@@ -13,13 +13,13 @@ function chunk(type, data) {
   bytes.writeUInt32BE((crc ^ 0xffffffff) >>> 0, bytes.length - 4); return bytes;
 }
 
-function geometricPng(width, height, variant) {
+function geometricPng(width, height, variant, {circleX=0.5,ink=null}={}) {
   const palette = [[206, 102, 71], [82, 128, 130], [126, 138, 96], [201, 165, 94]];
   const raw = Buffer.alloc((width * 3 + 1) * height);
-  const color = palette[variant];
+  const color = ink ?? palette[variant];
   for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
     const u = x / width, v = y / height;
-    const circle = Math.hypot(u - 0.5, (v - 0.40) * height / width) < 0.21;
+    const circle = Math.hypot(u - circleX, (v - 0.40) * height / width) < 0.21;
     const arch = u > 0.23 && u < 0.77 && v > 0.45 && v < 0.80;
     const triangle = v > 0.22 && v < 0.80 && Math.abs(u - 0.5) < (v - 0.22) * 0.50;
     const fill = variant === 0 ? circle : variant === 1 ? arch : variant === 2 ? triangle : circle || arch;
@@ -63,6 +63,29 @@ export async function generateDemo(directory = '.image-pick/demo') {
   return manifest;
 }
 
+export async function generateHandoffDemo(directory='.image-pick/handoff-demo') {
+  const dir=resolve(directory);await mkdir(dir,{recursive:true,mode:0o700});
+  const info=await lstat(dir);
+  if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Demo directory must be a real directory');
+  const definitions=[
+    {id:'current',title:'当前候选 · 位置已调回，颜色待确认',variant:0,options:{circleX:0.5,ink:[120,133,166]}},
+    {id:'source',title:'来源图 · 圆偏在左侧',variant:0,options:{circleX:0.34}},
+    {id:'previous',title:'上一版 · 圆向右移得太多',variant:0,options:{circleX:0.68,ink:[120,133,166]}},
+    {id:'reference',title:'参考图 · 只参考暖色，不要求照抄形状',variant:3,options:{}},
+  ];
+  const photos=[];
+  for (const definition of definitions) {
+    const file=`${definition.id}.png`;
+    await createOnce(join(dir,file),geometricPng(720,900,definition.variant,definition.options));
+    photos.push({id:definition.id,file,title:definition.title,group:definition.id === 'current' ? '待评价' : '对照素材',baseline:'candidate',
+      ...(definition.id === 'current' ? {comparisons:{source:'source',previous:'previous',reference:'reference'}} : {})});
+  }
+  const manifest=join(dir,'album.json');
+  await createOnce(manifest,`${JSON.stringify({schemaVersion:1,id:'handoff-demo',revision:'1',title:'反馈交接演示 · 合成图片，非真实评价',photos},null,2)}\n`);
+  return manifest;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  generateDemo().then(path => process.stdout.write(`${path}\n`)).catch(error => { process.stderr.write(`Demo generation failed: ${error.code ?? error.message}\n`); process.exitCode = 1; });
+  const generate=process.argv[2] === '--handoff' ? generateHandoffDemo : generateDemo;
+  generate().then(path => process.stdout.write(`${path}\n`)).catch(error => { process.stderr.write(`Demo generation failed: ${error.code ?? error.message}\n`); process.exitCode = 1; });
 }

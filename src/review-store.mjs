@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { validId } from './manifest.mjs';
 
 const MAX_RECEIPT = 8 * 1024 * 1024;
+const ISSUE_TAGS = ['composition', 'identity', 'color', 'details', 'text', 'other'];
 let lastSubmittedAt = 0;
 
 function fail(message, statusCode = 400) {
@@ -39,7 +40,12 @@ function normalizeRequest(album, request) {
     if (!row || !validId(row.id) || rows.has(row.id) || ![null, 'selected', 'rework', 'reject'].includes(row.localVerdict)) fail('Invalid photo ID or local verdict');
     if (typeof row.note !== 'string' || row.note.length > 4000) fail('Notes must contain at most 4000 characters');
     if (!isTimestamp(row.statusUpdatedAt) || !isTimestamp(row.noteUpdatedAt)) fail('Invalid update timestamp');
-    rows.set(row.id, { id: row.id, localVerdict: row.localVerdict, note: row.note, statusUpdatedAt: row.statusUpdatedAt, noteUpdatedAt: row.noteUpdatedAt });
+    const normalized = { id: row.id, localVerdict: row.localVerdict, note: row.note, statusUpdatedAt: row.statusUpdatedAt, noteUpdatedAt: row.noteUpdatedAt };
+    if (Object.hasOwn(row, 'issueTags') || Object.hasOwn(row, 'issuesUpdatedAt')) {
+      if (!Object.hasOwn(row, 'issueTags') || !Object.hasOwn(row, 'issuesUpdatedAt') || !Array.isArray(row.issueTags) || row.issueTags.length > ISSUE_TAGS.length || new Set(row.issueTags).size !== row.issueTags.length || !row.issueTags.every(tag => ISSUE_TAGS.includes(tag)) || !isTimestamp(row.issuesUpdatedAt)) fail('Invalid issue tags or update timestamp');
+      normalized.issueTags = row.issueTags.slice(); normalized.issuesUpdatedAt = row.issuesUpdatedAt;
+    }
+    rows.set(row.id, normalized);
   }
   const photos = album.photos.map(photo => {
     if (!rows.has(photo.id)) fail('Include each known photo exactly once');
@@ -141,6 +147,18 @@ export async function saveReceipt(album, request, reviewsDirectory) {
   }
 }
 
+export async function readReceiptById(album, reviewsDirectory, submissionId) {
+  if (!validId(submissionId)) fail('Invalid submission ID');
+  const dir = await storeDirectory(album, reviewsDirectory, false);
+  if (!dir) fail('Unknown submission ID for this album version');
+  try {
+    return await readReceipt(album, join(dir, `${storageId(submissionId)}.json`), submissionId);
+  } catch (error) {
+    if (error.code === 'ENOENT') fail('Unknown submission ID for this album version');
+    throw error;
+  }
+}
+
 export async function readFeedback(album, reviewsDirectory, sinceId = null) {
   if (sinceId !== null && !validId(sinceId)) fail('Invalid since submission ID');
   const dir = await storeDirectory(album, reviewsDirectory, false);
@@ -162,7 +180,9 @@ export async function readFeedback(album, reviewsDirectory, sinceId = null) {
     changes = [];
     for (let i = 0; i < album.photos.length; i++) {
       const before = since.photos[i], after = receipt.photos[i];
-      if (before.localVerdict !== after.localVerdict || before.note !== after.note) changes.push({ id: after.id, before: { localVerdict: before.localVerdict, note: before.note }, after: { localVerdict: after.localVerdict, note: after.note } });
+      const fields = row => ({ localVerdict: row.localVerdict, note: row.note, ...(Object.hasOwn(row, 'issueTags') ? { issueTags: row.issueTags } : {}) });
+      const tagsChanged = !isDeepStrictEqual([...(before.issueTags ?? [])].sort(), [...(after.issueTags ?? [])].sort());
+      if (before.localVerdict !== after.localVerdict || before.note !== after.note || tagsChanged) changes.push({ id: after.id, before: fields(before), after: fields(after) });
     }
   }
   return { albumId: album.id, manifestDigest: album.manifestDigest, receipt, summary, changes };
