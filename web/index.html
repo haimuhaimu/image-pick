@@ -20,7 +20,7 @@
         <button id="submitButton" class="primary" disabled>提交评价</button>
       </div>
     </header>
-    <div class="submission-bar"><p id="submissionStatus" role="status">尚未提交 · 评价不会修改原图或正式精选记录。</p></div>
+    <div class="submission-bar"><p id="submissionStatus" role="status">尚未提交 · 评价不会修改原图或正式精选记录。</p><button id="handoffButton" disabled title="先提交当前反馈，再交给 AI 继续">交给 AI 继续 →</button></div>
 
     <main class="workspace">
       <section class="viewer" aria-label="图片查看器">
@@ -28,6 +28,7 @@
           <div class="view-modes" role="group" aria-label="查看方式">
             <button id="singleButton" aria-pressed="true">单张</button>
             <button id="compareButton" aria-pressed="false" disabled>参照对比</button>
+            <select id="comparisonRole" aria-label="对照哪一版" hidden></select>
           </div>
           <div class="zoom-controls">
             <button id="faceButton" disabled title="查看图片标注的局部区域">局部</button>
@@ -78,6 +79,8 @@
           <textarea id="note" rows="4" aria-describedby="noteCount saveStatus" placeholder="喜欢哪里？哪些细节需要调整？" disabled></textarea>
           <p id="saveStatus" class="save-status" role="status">草稿仅保存在当前浏览器；提交后保存独立回执。</p>
         </div>
+        <div class="issue-section"><h3>想调整哪里？<span>可多选，不会自动标为返修</span></h3><div id="issueTags" class="issue-tags" role="group" aria-label="问题标签"></div></div>
+        <details class="import-section"><summary>找回导出的反馈</summary><p>只补入这批同版本图片的空白评价。已写过或主动清空的内容都保留；导入后仍需提交。</p><button id="importButton" disabled>选择反馈 JSON</button><input id="importFile" type="file" accept="application/json,.json" hidden><p id="importStatus" role="status"></p></details>
         <div id="conflictBanner" class="conflict-banner" role="alert" hidden>
           <p id="conflictText">另一标签页有不同草稿。本页内容已保留，未自动覆盖；请先导出备份。</p>
           <button id="conflictExport">导出本页备份</button>
@@ -96,6 +99,7 @@
     </section>
   </div>
   <dialog id="overview" aria-labelledby="overviewTitle"><div class="dialog-header"><div><h2 id="overviewTitle">图片总览</h2><p>选择图片，回到大图查看。</p></div><button id="closeOverview">关闭</button></div><div id="overviewGrid" class="overview-grid"></div></dialog>
+  <dialog id="handoffDialog" aria-labelledby="handoffTitle"><div class="dialog-header"><div><h2 id="handoffTitle">让 AI 接着改这一版</h2><p id="handoffSummary"></p></div><button id="closeHandoff">关闭</button></div><ol class="handoff-steps"><li>复制下方交接信息，发给正在处理这组图的 AI。</li><li>AI 先核对原图指纹和这次回执，只处理明确标为「返修」的图片。</li><li>修改另存新版本，再送回来选。原图和这次评价都保留。</li></ol><label for="handoffText">本次交接信息</label><textarea id="handoffText" readonly rows="7"></textarea><div class="handoff-actions"><button id="copyHandoff" class="primary">复制交接信息</button><p id="copyStatus" role="status">不会自动启动 AI，也不会调用付费接口。</p></div></dialog>
   <div id="toast" class="toast" role="status" hidden></div>
   <noscript><p>选片台需要 JavaScript 才能查看图片和保存评价。</p></noscript>
 </body>

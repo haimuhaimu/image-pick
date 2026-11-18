@@ -2,6 +2,9 @@ import {test,expect} from '@playwright/test';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
 import {generateDemo} from '../scripts/demo.mjs';
 import {loadAlbum} from '../src/manifest.mjs';
 import {createAlbumServer} from '../src/server.mjs';
@@ -49,6 +52,109 @@ test.beforeEach(async()=>{
 test.afterEach(async()=>{
   await stop();
   if (directory) await rm(directory,{recursive:true,force:true});
+});
+
+test('explicit submission unlocks a pinned AI handoff; edits and imported data remain drafts',async({page,request},testInfo)=>{
+  await ready(page);
+  await expect(page.locator('#handoffButton')).toBeDisabled();
+  await page.locator('[data-issue="details"]').click();
+  await expect(page.locator('#verdictText')).toContainText('未标记');
+  await page.locator('[data-verdict="rework"]').click();
+  await page.locator('#note').fill('保留构图，只修边缘；$(不是可执行指令)');
+  await page.locator('#submitButton').click();
+  await expect(page.locator('#submissionStatus')).toContainText('已提交');
+  const saved=await receipt(request);
+  expect(saved.photos[0].issueTags).toEqual(['details']);
+  await expect(page.locator('#handoffButton')).toBeEnabled();
+  await page.locator('#handoffButton').click();
+  await expect(page.locator('#handoffText')).toBeVisible();
+  const handoffText=await page.locator('#handoffText').inputValue();
+  expect(handoffText).toContain(saved.submissionId);
+  expect(handoffText).toContain(loaded.album.manifestDigest);
+  expect(handoffText).not.toContain('$(不是可执行指令)');
+  const {stdout}=await promisify(execFile)(process.execPath,[fileURLToPath(new URL('../bin/image-pick.mjs',import.meta.url)),'handoff',manifestPath,'--submission',saved.submissionId,'--digest',loaded.album.manifestDigest,'--reviews',join(directory,'private-reviews')]);
+  const handoff=JSON.parse(stdout);
+  expect(handoff.targets).toHaveLength(1);
+  expect(handoff.targets[0].id).toBe(loaded.album.photos[0].id);
+  expect(handoff.targets[0].sha256).toBe(loaded.album.photos[0].sha256);
+  expect(handoff.targets[0].feedback.note).toBe(saved.photos[0].note);
+  await page.evaluate(()=>Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('blocked for fallback test');}}}));
+  await page.locator('#copyHandoff').click();
+  await expect(page.locator('#copyStatus')).toContainText('手动复制');
+  await page.screenshot({path:testInfo.outputPath('handoff-desktop.png')});
+  await page.locator('#closeHandoff').click();
+  await page.locator('[data-issue="color"]').click();
+  await expect(page.locator('#handoffButton')).toBeDisabled();
+  await expect(page.locator('#submissionStatus')).toContainText('尚未提交');
+  const draft=await exported(page);
+  draft.photos[0].note='不应覆盖';
+  draft.photos[1].note='导入给下一张的修改意见';
+  draft.photos[1].noteUpdatedAt=new Date().toISOString();
+  await page.getByText('找回导出的反馈',{exact:true}).click();
+  const chooserPromise=page.waitForEvent('filechooser');
+  await page.locator('#importButton').press('Enter');
+  const chooser=await chooserPromise;
+  await chooser.setFiles({name:'feedback.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(draft))});
+  await expect(page.locator('#importStatus')).toContainText('补入 1 张');
+  await expect(page.locator('#note')).toHaveValue('保留构图，只修边缘；$(不是可执行指令)');
+  await select(page,loaded.album.photos[1].id);
+  await expect(page.locator('#note')).toHaveValue('导入给下一张的修改意见');
+  await expect(page.locator('#handoffButton')).toBeDisabled();
+  expect((await receipt(request)).submissionId).toBe(saved.submissionId);
+  const wrong={...draft,manifestDigest:'0'.repeat(64)};
+  await page.locator('#importFile').setInputFiles({name:'wrong.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(wrong))});
+  await expect(page.locator('#importStatus')).toContainText('未导入');
+  await expect(page.locator('#note')).toHaveValue('导入给下一张的修改意见');
+  await page.locator('#importFile').setInputFiles([]);
+  await expect(page.locator('#note')).toHaveValue('导入给下一张的修改意见');
+});
+
+test('import changing the filtered current image resets the next image to full view',async({page})=>{
+  await ready(page);
+  await page.locator('#statusFilter').selectOption('unreviewed');
+  await page.locator('#zoomIn').click();
+  expect(parseFloat(await page.locator('#zoomValue').innerText())).toBeGreaterThan(1);
+  const draft=await exported(page);
+  draft.photos[0].localVerdict='selected';
+  draft.photos[0].statusUpdatedAt=new Date().toISOString();
+  await page.locator('#importFile').setInputFiles({name:'feedback.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(draft))});
+  await expect(page.locator('#photoCode')).toHaveText(loaded.album.photos[1].id);
+  await expect(page.locator('#zoomValue')).toHaveText('1×');
+});
+
+test('source, previous and reference comparisons remain clear in desktop and narrow touch layouts',async({page,browser},testInfo)=>{
+  await stop();
+  manifest.photos[0].comparisons={source:'arch',previous:'triangle',reference:'reference'};
+  await writeFile(manifestPath,JSON.stringify(manifest));
+  await start();
+  await ready(page);
+  await page.locator('#compareButton').click();
+  await page.locator('#comparisonRole').selectOption('previous');
+  await expect(page.locator('#referenceCaption')).toHaveText('上一版 / triangle');
+  await page.locator('#comparisonRole').selectOption('source');
+  await expect(page.locator('#referenceCaption')).toHaveText('来源图 / arch');
+  await page.screenshot({path:testInfo.outputPath('roles-desktop.png')});
+  const mobile=await browser.newContext({viewport:{width:390,height:844},hasTouch:true,isMobile:true,colorScheme:'dark',reducedMotion:'reduce'});
+  try {
+    const touch=await mobile.newPage();
+    await ready(touch);
+    await touch.locator('#compareButton').tap();
+    await touch.locator('#comparisonRole').selectOption('previous');
+    await expect(touch.locator('#referenceCaption')).toHaveText('上一版 / triangle');
+    await touch.locator('[data-issue="composition"]').tap();
+    await touch.locator('[data-verdict="rework"]').tap();
+    await touch.locator('#submitButton').tap();
+    await expect(touch.locator('#handoffButton')).toBeEnabled();
+    await touch.screenshot({path:testInfo.outputPath('roles-mobile-dark.png'),fullPage:true});
+    await touch.locator('#handoffButton').tap();
+    await expect(touch.locator('#handoffText')).toBeVisible();
+    await touch.screenshot({path:testInfo.outputPath('handoff-mobile-dark.png')});
+    expect(await touch.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+    await touch.locator('#closeHandoff').tap();
+    await select(touch,'reference');
+    await expect(touch.locator('#compareButton')).toBeDisabled();
+    await expect(touch.locator('#comparisonRole')).toBeHidden();
+  } finally { await mobile.close(); }
 });
 
 test('neutral dynamic album shows full images, focus, reference, keyboard and desktop/mobile layouts',async({page},testInfo)=>{

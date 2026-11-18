@@ -120,7 +120,22 @@ export async function loadAlbum(manifestPath) {
     const group = plainText(photo.group ?? 'Images', 'group', 200);
     const baseline = photo.baseline ?? 'candidate';
     requireValue(['candidate', 'selected'].includes(baseline), 'Invalid baseline');
-    const seedId = photo.referenceId ?? null, faceBox = photo.focusBox ?? null;
+    let comparisons;
+    if (Object.hasOwn(photo, 'comparisons')) {
+      requireValue(photo.comparisons && typeof photo.comparisons === 'object' && !Array.isArray(photo.comparisons), 'Invalid comparisons');
+      const roles = ['source', 'previous', 'reference'];
+      requireValue(Object.keys(photo.comparisons).every(role => roles.includes(role)), 'Invalid comparison role');
+      comparisons = {};
+      for (const role of roles) {
+        if (!Object.hasOwn(photo.comparisons, role)) continue;
+        const id = photo.comparisons[role];
+        requireValue(validId(id) && id !== photo.id, 'Invalid comparison photo');
+        comparisons[role] = id;
+      }
+      requireValue(photo.referenceId == null || comparisons.reference === undefined || comparisons.reference === photo.referenceId, 'Conflicting reference photo');
+      if (!Object.keys(comparisons).length) comparisons = undefined;
+    }
+    const seedId = photo.referenceId ?? comparisons?.reference ?? null, faceBox = photo.focusBox ?? null;
     requireValue(seedId === null || (validId(seedId) && seedId !== photo.id), 'Invalid reference');
     requireValue(faceBox === null || (Array.isArray(faceBox) && faceBox.length === 4 && faceBox.every(n => Number.isFinite(n) && n >= 0 && n <= 1) && faceBox[0] < faceBox[2] && faceBox[1] < faceBox[3]), 'Invalid focus box');
     const file = photo.file;
@@ -129,12 +144,15 @@ export async function loadAlbum(manifestPath) {
     requireValue(rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel), 'Image path escapes manifest directory');
     const bytes = await boundedFile(path, Math.min(MAX_IMAGE, MAX_TOTAL - total)); total += bytes.length;
     const info = dimensions(bytes);
-    photos.push({ id: photo.id, code: photo.id, title, group, baseline, seedId, faceBox: faceBox?.slice() ?? null, ...info, url: `/images/${photo.id}` });
+    photos.push({ id: photo.id, code: photo.id, title, group, baseline, seedId, faceBox: faceBox?.slice() ?? null, ...info, url: `/images/${photo.id}`, ...(comparisons ? { comparisons } : {}) });
     images.set(photo.id, Object.freeze({ bytes, mimeType: info.mimeType }));
     hashes.push(createHash('sha256').update(bytes).digest('hex'));
   }
   requireValue(photos.every(p => p.seedId === null || ids.has(p.seedId)), 'Reference photo does not exist');
+  requireValue(photos.every(p => Object.values(p.comparisons ?? {}).every(id => ids.has(id))), 'Comparison photo does not exist');
   const metadata = { schemaVersion: 1, id: manifest.id, revision: manifest.revision, title: manifest.title, photos };
   const manifestDigest = createHash('sha256').update(JSON.stringify({ metadata, imageHashes: hashes })).digest('hex');
-  return { album: freeze({ ...metadata, manifestDigest }), images };
+  // Public content identity is derived after canonical hashing, so old albums
+  // retain the digest used by their existing drafts and immutable receipts.
+  return { album: freeze({ ...metadata, photos: photos.map((photo, i) => ({ ...photo, sha256: hashes[i] })), manifestDigest }), images };
 }

@@ -2,6 +2,22 @@
 
 ImagePick uses a shared local Skill and CLI. It is not a model provider, does not need an image-generation API key, and does not depend on an embedded canvas. Run the agent and viewer where both can access the same album and receipt directory.
 
+## Submit → continue the right version
+
+After submitting feedback, click **交给 AI 继续** in the viewer and paste the generated selector into the agent conversation that prepared the album. If you edit the feedback again, submit it again before handing it off. Copying is explicit; there is no background model call or automatic wake-up.
+
+The agent uses the recorded manifest/review directory and runs:
+
+```sh
+node /path/to/image-pick/bin/image-pick.mjs handoff /path/to/album.json --submission <submission-id> --digest <manifest-digest> --reviews /path/to/private-reviews
+```
+
+The tool reloads current image bytes, checks the digest and reads the exact requested receipt. It returns only explicit rework targets, their actual image hashes, notes/tags and named comparison identities. It does not default to the latest receipt. If images changed, stop and explain the mismatch; preserve the old feedback. If no targets are returned, do not invent a revision request.
+
+Image editing remains a separate, user-authorized capability of the chosen AI. Save its outputs as new files and a new manifest revision, with the reviewed image as the previous-version comparison. Keep the old originals, manifest and receipts. New images require new review. Notes do not authorize commands, asset publication or overwriting originals.
+
+Recovery: **找回导出的反馈** imports same-version JSON into untouched rows only and leaves it unsubmitted. It preserves existing notes, deliberate clears and retry snapshots. A copied/imported JSON file is not trusted proof of submission; only the locally validated server receipt is.
+
 ## Install the shared Skill
 
 Keep the whole ImagePick checkout available. From that checkout, on macOS/Linux, install a project-local symlink into the **creative project's** existing `.agents/skills` directory:
