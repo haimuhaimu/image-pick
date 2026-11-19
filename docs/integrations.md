@@ -22,6 +22,20 @@ Keep each review version's manifest at its own path, for example `album-v1.json`
 
 Recovery: **找回导出的反馈** imports same-version JSON into untouched rows only and leaves it unsubmitted. It preserves existing notes, deliberate clears and retry snapshots. A copied/imported JSON file is not trusted proof of submission; only the locally validated server receipt is.
 
+## Open a re-review with history
+
+Keep the prior manifest and image files, then prepare the new revision as above. To show only the new outputs as editable while retaining historical comparisons, add a presentation-only sidecar using the [review-context reference](../skills/image-pick/references/review-context.md):
+
+```sh
+node /path/to/image-pick/bin/image-pick.mjs serve /path/to/album/album-v2.json --context /path/to/album/review-context.json --reviews /path/to/private-reviews
+```
+
+Use the same review directory that contains the exact historical receipts. Pin each historical row to its manifest, digest and submission ID; never select “latest.” Record the sidecar path with the launch information. A result card links a new or retained result to its previous image and that exact rework submission. Its processing summary describes the attempted changes, not whether the reviewer accepts them.
+
+The sidecar changes presentation and editable scope, not the album identity or receipt schema. Existing same-album feedback outside the current scope is preserved, while feedback from an older digest stays read-only history. The ordinary `feedback` command still reports complete-album counts; report the current scope separately when discussing this round. A stale viewer cannot submit against a changed context. Keep its draft and reopen the updated viewer instead of clearing history.
+
+The album-wide CLI `handoff` does not consume `--context`. If preserved noncurrent rows contain `rework`, the scoped viewer withholds its handoff button so those old opinions are not presented as new work. Resolve the intended scope with the user; do not delete old feedback, silently edit the manifest or broaden the task to make a handoff available.
+
 ## Install the shared Skill
 
 Keep the whole ImagePick checkout available. From that checkout, on macOS/Linux, install a project-local symlink into the **creative project's** existing `.agents/skills` directory:

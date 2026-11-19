@@ -5,12 +5,13 @@ import { loadAlbum } from '../src/manifest.mjs';
 import { createAlbumServer } from '../src/server.mjs';
 import { readFeedback } from '../src/review-store.mjs';
 import { readHandoff } from '../src/handoff.mjs';
+import { loadReviewContext } from '../src/review-context.mjs';
 
 const usage = `ImagePick — local image selection and feedback (Node.js 22+)
 
 Usage:
   image-pick validate path/to/album.json
-  image-pick serve path/to/album.json [--port 4180] [--reviews path]
+  image-pick serve path/to/album.json [--port 4180] [--reviews path] [--context path]
   image-pick feedback path/to/album.json [--reviews path] [--since submission-id]
   image-pick handoff path/to/album.json --submission id --digest sha256 [--reviews path]
   image-pick --help
@@ -23,7 +24,7 @@ async function main(args) {
   if (args.length === 1 && ['help', '--help'].includes(args[0])) { process.stdout.write(usage); return; }
   const [command, input, ...options] = args;
   if (!['validate', 'serve', 'feedback', 'handoff'].includes(command) || !input || input.startsWith('--')) throw new Error('Use --help for usage');
-  const allowed = command === 'serve' ? ['--reviews', '--port'] : command === 'feedback' ? ['--reviews', '--since'] : command === 'handoff' ? ['--reviews', '--submission', '--digest'] : [];
+  const allowed = command === 'serve' ? ['--reviews', '--port', '--context'] : command === 'feedback' ? ['--reviews', '--since'] : command === 'handoff' ? ['--reviews', '--submission', '--digest'] : [];
   const parsed = new Map();
   for (let i = 0; i < options.length; i += 2) {
     const flag = options[i], value = options[i + 1];
@@ -47,7 +48,8 @@ async function main(args) {
   }
   // Fail startup on corrupt prior evidence rather than displaying an empty state.
   await readFeedback(album, reviewsDirectory);
-  const server = createAlbumServer({ album, images, reviewsDirectory });
+  const reviewContext=parsed.has('--context') ? await loadReviewContext({contextPath:resolve(parsed.get('--context')),manifestPath,album,reviewsDirectory}) : null;
+  const server = createAlbumServer({ album, images, reviewsDirectory, reviewContext });
   await new Promise((resolveListening, rejectListening) => {
     server.once('error', rejectListening); server.listen(Number(portText), '127.0.0.1', resolveListening);
   });

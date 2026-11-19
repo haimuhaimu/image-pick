@@ -42,7 +42,7 @@ async function requestJson(req) {
   catch { reject('Malformed JSON request'); }
 }
 
-export function createAlbumServer({ album, images, reviewsDirectory }) {
+export function createAlbumServer({ album, images, reviewsDirectory, reviewContext=null }) {
   const token = randomBytes(32).toString('hex');
   const server = createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -52,7 +52,7 @@ export function createAlbumServer({ album, images, reviewsDirectory }) {
     try {
       const host = `127.0.0.1:${server.address().port}`; const origin = `http://${host}`;
       const count = key => req.rawHeaders.filter((_, index) => index % 2 === 0 && req.rawHeaders[index].toLowerCase() === key).length;
-      if (count('host') !== 1 || req.headers.host !== host || count('origin') > 1 || count('x-image-pick-token') > 1) reject('Untrusted request source', 403);
+      if (count('host') !== 1 || req.headers.host !== host || count('origin') > 1 || count('x-image-pick-token') > 1 || count('x-image-pick-context') > 1) reject('Untrusted request source', 403);
       if (req.headers.origin !== undefined && req.headers.origin !== origin) reject('Untrusted request origin', 403);
       const site = req.headers['sec-fetch-site'];
       if (site !== undefined && site !== 'same-origin' && !(site === 'none' && req.method === 'GET')) reject('Untrusted fetch source', 403);
@@ -63,11 +63,12 @@ export function createAlbumServer({ album, images, reviewsDirectory }) {
       const path = (req.url ?? '').split('?')[0];
       if (req.method === 'GET' && path === '/api/album') {
         const { receipt } = await readFeedback(album, reviewsDirectory);
-        return json(res, 200, { album, token, receipt });
+        return json(res, 200, { album, token, receipt, ...(reviewContext ? {reviewContext} : {}) });
       }
       if (req.method === 'POST' && path === '/api/feedback') {
+        if ((req.headers['x-image-pick-context'] ?? null)!==(reviewContext?.contextDigest ?? null)) reject('复评范围已改变；请保留草稿并重新打开相册。',409);
         const payload = await requestJson(req);
-        const receipt = await saveReceipt(album, payload, reviewsDirectory);
+        const receipt = await saveReceipt(album, payload, reviewsDirectory, {currentPhotoIds:reviewContext?.currentPhotoIds ?? null});
         return json(res, 200, { receipt });
       }
       if (req.method === 'GET' && path.startsWith('/images/')) {
