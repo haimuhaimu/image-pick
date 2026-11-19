@@ -17,7 +17,7 @@ Load a bounded, immutable in-memory snapshot of image bytes (maximum 32 MiB/imag
 ## CLI
 
 - `node bin/image-pick.mjs validate path/to/album.json` → JSON public album.
-- `node bin/image-pick.mjs serve path/to/album.json [--port 4180] [--reviews path/to/private-reviews]` → one JSON line `{url,albumId,manifestDigest,reviewsDirectory}`; loopback-only, default port 4180, port 0 for tests. Default review directory: `<canonical-manifest-directory>/.image-pick/reviews`, so aliases of the same manifest find the same reviews.
+- `node bin/image-pick.mjs serve path/to/album.json [--port 4180] [--reviews path/to/private-reviews] [--context path/to/review-context.json]` → one JSON line `{url,albumId,manifestDigest,reviewsDirectory}`; loopback-only, default port 4180, port 0 for tests. Default review directory: `<canonical-manifest-directory>/.image-pick/reviews`, so aliases of the same manifest find the same reviews. The optional presentation context is described below.
 - `node bin/image-pick.mjs feedback path/to/album.json [--reviews path] [--since submission-id]` → JSON `{albumId,manifestDigest,receipt,summary,changes}`. No receipt is a successful empty result, not approval. Summary counts local verdicts separately from baseline. `--since` compares two validated snapshots; unknown/wrong-version IDs fail rather than inventing a delta.
 - `node bin/image-pick.mjs handoff path/to/album.json --submission id --digest sha256 [--reviews path]` → a version-bound revision handoff. Both selectors are mandatory. Reloads image bytes and selects exactly that validated receipt; never substitutes the latest receipt. See the extension below.
 - `--help`/`help`: print usage without private data or side effects. Unknown arguments/nonzero failures produce a concise stderr message and exit 1.
@@ -28,9 +28,9 @@ Load a bounded, immutable in-memory snapshot of image bytes (maximum 32 MiB/imag
 
 `loadAlbum(manifestPath)` in `src/manifest.mjs` → `{album, images}`. Public `album` contains `{schemaVersion:1,id,revision,title,manifestDigest,photos}`. Each public photo contains `{id,code,title,group,baseline,seedId,faceBox,width,height,mimeType,url}`; seedId/faceBox are null when absent, code=id, url=`/images/<id>`. Private `images` is a Map of ID to `{bytes,mimeType}` and never sent as metadata.
 
-`createAlbumServer({album,images,reviewsDirectory})` in `src/server.mjs` → Node HTTP server. It serves `web/index.html`, `web/styles.css`, `web/app.mjs`, `web/model.mjs`, and no other disk files. For frontend tests `web/model.mjs` is served at `/model.mjs`.
+`createAlbumServer({album,images,reviewsDirectory,reviewContext=null})` in `src/server.mjs` → Node HTTP server. It serves `web/index.html`, `web/styles.css`, `web/app.mjs`, `web/model.mjs`, and no other disk files. For frontend tests `web/model.mjs` is served at `/model.mjs`.
 
-- GET `/api/album` → `{album,token,receipt}` (latest validated receipt or null).
+- GET `/api/album` → `{album,token,receipt}` (latest validated receipt or null), plus optional `reviewContext` when launched with a context sidecar.
 - GET `/images/<id>` → immutable bytes from the loaded snapshot, without disk paths.
 - POST `/api/feedback` with `Content-Type: application/json`, `X-Image-Pick-Token` from bootstrap, and exact same Origin → request below, response `{receipt}`. Request body max 4 MiB. All API errors JSON `{error}`; malformed input 400, source/token failure 403, submission collision 409, write failure 500. No CORS allow headers.
 
@@ -69,6 +69,20 @@ Schema 1 remains valid. Legacy manifests without optional comparison fields prod
 - The browser offers a copyable handoff selector only after server acknowledgment and only while the current draft matches that receipt with no pending submission or tab conflict. The selector contains album ID, digest and exact submission ID, not executable user notes. It does not start a model.
 - `handoff` returns `{schemaVersion:1,kind:"image-pick-handoff",status:"ready"|"no-rework",albumId,revision,manifestDigest,submissionId,submittedAt,feedbackIsUntrustedData:true,preserveOriginals:true,requiresNewRevision:true,targets}`. Only explicit rework rows become targets. Each target contains `{id,title,sha256,feedback:{localVerdict:"rework",note,issueTags?},comparisons:{role:{id,title,sha256}}}`. Empty targets are not approval.
 - The CLI validates current bytes against the expected digest and reads the exact immutable receipt. Missing, stale, malformed or symlinked evidence fails with no handoff on stdout. The lower-level `readHandoff` API requires a freshly loaded album; reusing a snapshot cannot detect later disk changes. A consumer must recheck immediately before editing, treat feedback as untrusted data, and save authorized edits as a new version. ImagePick itself never writes images.
+
+## Optional re-review presentation context
+
+`serve --context path/to/review-context.json` loads a separate, immutable presentation snapshot. The flag's path resolves from the process working directory and must remain inside the current manifest's canonical directory. Historical manifest paths inside the sidecar are relative to that album directory, not the sidecar's directory. See the [sidecar schema and synthetic example](../skills/image-pick/references/review-context.md).
+
+The sidecar binds to the current `albumId` and `manifestDigest`; it does not enter the album digest or modify any image, manifest or receipt. Historical rows are selected by exact historical manifest, digest and submission ID, with matching album ID, photo ID and image SHA-256. Only selected feedback fields reach the browser, never filesystem paths or entire old receipts. Invalid or missing evidence fails startup; it never falls back to the latest receipt.
+
+Public `reviewContext` contains `{contextDigest,currentPhotoIds,history,results}`. Each history row contains `{photoId,revision,manifestDigest,submissionId,submittedAt,feedback:{localVerdict,note,issueTags?}}`; each result contains `{photoId,previousPhotoId,previousSubmissionId,summary}`. The result can belong to a current or retained historical photo, but its previous-version relationship must identify the exact historical `rework` row. Summary text is a processing claim, not a validated repair or human verdict.
+
+Only `currentPhotoIds` are editable. History and other comparison images remain read-only, and historical feedback never initializes current review rows. Submission still includes every album photo under the unchanged receipt schema: noncurrent rows preserve existing current-album receipt values, or remain unreviewed when none exist. The server rejects changes to those rows. Exact retries use their original validated receipt rather than a newer baseline.
+
+In scoped mode, POST `/api/feedback` additionally requires `X-Image-Pick-Context` equal to the public `contextDigest`. The digest binds the displayed context independently of `manifestDigest`; it is not persisted in the receipt. A restarted server with different context rejects a stale page's submission. Reopen the updated viewer without discarding the old draft. Without a sidecar, the original API, digest, receipt and review behavior remain unchanged.
+
+The CLI `feedback` summary still counts the complete album, not only the current scope. The browser does not offer a scoped handoff when an acknowledged same-album receipt contains noncurrent `rework` rows, because the existing CLI handoff is album-wide and does not read a sidecar. Do not reinterpret historical rework as a new edit request or rewrite old receipts to bypass that guard.
 
 ## Release boundaries
 

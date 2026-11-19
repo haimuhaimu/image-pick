@@ -70,6 +70,8 @@ npm run demo
 
 用 `npm run demo:handoff` 可以体验「来源图／上一版／参考图 → 标返修和问题标签 → 提交 → 交给 AI」；演示素材和记录都与原来的 demo 分开。
 
+再次复审时，可以用可选的 `serve --context` 配置把「本轮待评」和「只读历史」分开，并在返修卡上并列展示上次的准确反馈与本轮处理说明。处理说明不代表人工验收通过，原图、旧清单和历史回执均保留。见[复审配置](./docs/integrations.md#open-a-re-review-with-history)。
+
 仓库已经包含可复用的 [ImagePick Skill](./skills/image-pick/SKILL.md) 和本地 CLI。兼容的 Harness 只需要能执行本地命令、访问同一组文件，并为评审者提供浏览器。ImagePick 不绑定模型 SDK，也不依赖专有画布。
 
 ## 选片台提供什么
@@ -134,7 +136,7 @@ node bin/image-pick.mjs feedback /你的照片目录/album.json --since 上一�
 - `receipt: null` 表示当前相册 ID 和图片版本没有正式回执。同一目录中仍可能保存旧版本回执。
 - `localVerdict: null` 表示评审者本次没有表达结论。
 - `baseline: selected` 表示原本已经入选，不等于本次新通过。
-- 浏览器导出文件只是备份草稿，不是正式回执。v0.1 暂不支持导入草稿。
+- 浏览器导出文件只是备份草稿，不是正式回执。**找回导出的反馈**只将同版本数据补入未编辑项，之后仍需明确提交。
 
 ## Harness 兼容性
 

@@ -64,7 +64,19 @@
       </section>
 
       <aside class="review-panel" aria-label="选片和备注">
+        <div id="scopeConflict" class="conflict-banner" role="alert" hidden><p>旧草稿还包含历史或参考图的改动，本轮不能替它提交。完整草稿和待确认提交都已保留，刷新不会解除此冲突。</p><p>请先备份，再请 AI 在同一地址、同一相册和评价目录下，以原来的完整相册方式打开（不带 --context），处理旧草稿后再回来。</p><button id="scopeBackup">备份完整草稿与待确认提交</button></div>
         <div class="photo-heading"><span id="photoCode" class="photo-code"></span><h2 id="photoTitle">正在载入图片</h2><p id="photoMeta" class="muted"></p></div>
+        <section id="revisionCard" class="context-card" aria-labelledby="revisionTitle" hidden>
+          <h3 id="revisionTitle">返修复评</h3>
+          <div class="context-block"><strong id="previousFeedbackTitle">上次意见</strong><p id="previousFeedback" class="feedback-copy" tabindex="0" aria-label="上次意见，可滚动查看全文"></p><p id="previousIssues" class="muted"></p></div>
+          <div class="context-block"><strong>这次结果</strong><p id="revisionSummary" class="feedback-copy" tabindex="0"></p><p class="muted">处理说明 ≠ 验收结论。请重新评价；旧意见不带入。</p></div>
+          <button id="viewPrevious" class="context-link">查看上一版与评价</button>
+        </section>
+        <section id="historyCard" class="context-card" aria-labelledby="historyTitle" hidden>
+          <h3 id="historyTitle">历史版本 · 只读</h3><p id="historyVerdict"></p><p id="historyNote" class="feedback-copy" tabindex="0" aria-label="历史评价，可滚动查看全文"></p><p id="historyIssues" class="muted"></p>
+          <details id="historySource"><summary>这次评价来自哪里？</summary><p id="historyReceipt" class="muted"></p></details>
+          <button id="returnCurrent" class="context-link">回到本轮</button>
+        </section>
         <div class="review-section">
           <h3>这张怎么样？</h3>
           <div class="verdict-buttons" role="group" aria-label="本次选片标记">

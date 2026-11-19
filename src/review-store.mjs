@@ -118,7 +118,7 @@ async function readReceipt(album, path, expectedId) {
   } finally { await handle.close(); }
 }
 
-export async function saveReceipt(album, request, reviewsDirectory) {
+export async function saveReceipt(album, request, reviewsDirectory, {currentPhotoIds=null}={}) {
   const normalized = normalizeRequest(album, request);
   const dir = await storeDirectory(album, reviewsDirectory, true);
   const destination = join(dir, `${storageId(normalized.submissionId)}.json`);
@@ -128,6 +128,13 @@ export async function saveReceipt(album, request, reviewsDirectory) {
     return previous;
   };
   try { return await retry(); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (currentPhotoIds) {
+    const {receipt:latest}=await readFeedback(album,reviewsDirectory);
+    const previous=latest ? normalizeRequest(album,latest).photos : album.photos.map(photo=>({id:photo.id,localVerdict:null,note:'',statusUpdatedAt:null,noteUpdatedAt:null}));
+    for(let i=0;i<normalized.photos.length;i++) {
+      if(!currentPhotoIds.includes(normalized.photos[i].id) && !isDeepStrictEqual(normalized.photos[i],previous[i])) fail('历史与参考图片只读；原评价已保留。请导出草稿并重新打开本轮。',409);
+    }
+  }
   lastSubmittedAt = Math.max(Date.now(), lastSubmittedAt + 1);
   const receipt = withAuthority(album, normalized, new Date(lastSubmittedAt).toISOString());
   const temporary = join(dir, `.pending-${randomUUID()}`);

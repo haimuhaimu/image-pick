@@ -72,6 +72,8 @@ To continue a revision, click **交给 AI 继续** after submitting and paste th
 
 Run `npm run demo:handoff` for a separate synthetic source / previous / reference comparison demo with issue tags and the submitted-feedback handoff.
 
+For another review round, an optional `serve --context` sidecar separates current images from read-only history and shows the exact earlier feedback beside a processing summary. The summary is not human acceptance; original images, manifests and receipts stay intact. See [re-review setup](./docs/integrations.md#open-a-re-review-with-history).
+
 The repository includes a reusable [ImagePick Skill](./skills/image-pick/SKILL.md) and a local CLI. A compatible harness needs local command execution, access to the same files, and a browser for the reviewer. ImagePick is not tied to a model SDK or proprietary canvas.
 
 ## What the review room gives you
@@ -136,7 +138,7 @@ Receipts default to `.image-pick/reviews` inside the canonical album directory. 
 - `receipt: null` means no submitted receipt exists for the current album ID and image-set digest. Older versions may still have receipts.
 - `localVerdict: null` means the reviewer expressed no current opinion.
 - `baseline: selected` records an existing selection. It is not a new approval.
-- A browser export is a backup draft, not a submitted receipt. v0.1 does not include draft import.
+- A browser export is a backup draft, not a submitted receipt. **找回导出的反馈** imports matching-version data into untouched rows only; it still needs explicit submission.
 
 ## Harness compatibility
 
