@@ -39,6 +39,7 @@ function renderSubmissionStatus() {
   output.classList.toggle('error',Boolean(submissionError));
   if (sending) output.textContent='正在提交固定快照… 你可以继续编辑，新改动会保留为草稿。';
   else if (pendingSubmission) output.textContent=`上次提交未确认。重试会发送同一快照；之后的新改动仍保留在草稿。${submissionError ? ` ${submissionError}` : ''}`;
+  else if (submissionError) output.textContent=submissionError;
   else if (receipt && sameReviews(reviews,receipt.photos)) output.textContent=`已提交 · ${new Date(receipt.submittedAt).toLocaleString()} · 独立回执已保存，原图未改动。`;
   else if (receipt) output.textContent='草稿有新改动，尚未提交。上次回执已保留，当前编辑不会自动覆盖它。';
   else output.textContent='尚未提交 · 本地草稿。可以只评价部分图片；未标记不代表通过。';
@@ -108,7 +109,7 @@ function edit(patch) {
 async function fetchJSON(url,options={}) {
   const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(15000),...options});
   const data=await response.json();
-  if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : '本地服务未能完成请求。');
+  if (!response.ok) throw Object.assign(new Error(typeof data.error === 'string' ? data.error : '本地服务未能完成请求。'),{status:response.status,requestUrl:url});
   return data;
 }
 
@@ -139,7 +140,15 @@ async function submit() {
     // Do not restore reviews from the receipt: they may contain newer in-flight edits.
     saveDraft();
   } catch(error) {
-    submissionError=error.name === 'TimeoutError' ? '连接超时；无法确认是否已保存。' : `无法确认保存结果：${error.message}`;
+    if (error.requestUrl === '/api/feedback' && error.status === 400 && new TextEncoder().encode(JSON.stringify(snapshot)).byteLength>4*1024*1024) {
+      // A snapshot above the contract's 4 MiB limit cannot have been saved.
+      // Other rejections may follow a lost acknowledgment of an earlier save.
+      pendingSubmission=null;
+      submissionError=`提交被拒绝，尚未保存。草稿已保留，请调整后重新提交。${error.message}`;
+      saveDraft();
+    } else {
+      submissionError=error.name === 'TimeoutError' ? '连接超时；无法确认是否已保存。' : `无法确认保存结果：${error.message}`;
+    }
   } finally {
     sending=false;
     renderSaveStatus();
