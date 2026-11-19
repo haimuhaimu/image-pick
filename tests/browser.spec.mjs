@@ -277,6 +277,89 @@ test('a lost response retries the exact snapshot while later edits stay unsubmit
   expect((await receipt(request)).photos[0].note).toBe('Newer edit while request is in flight');
 });
 
+test('a server-rejected oversized snapshot can be corrected and submitted with a new identity',async({page,request},testInfo)=>{
+  await stop();
+  const source=manifest.photos[0];
+  manifest.photos=Array.from({length:180},(_,index)=>({...source,id:`synthetic-${index}`,referenceId:undefined}));
+  await writeFile(manifestPath,JSON.stringify(manifest));
+  await start();
+  await ready(page);
+  const draft=await exported(page);
+  for (const row of draft.photos) {
+    row.note='\u0000'.repeat(4000);
+    row.noteUpdatedAt='2026-11-18T00:00:00.000Z';
+  }
+  await page.locator('#importFile').setInputFiles({name:'large-feedback.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(draft))});
+  await expect(page.locator('#importStatus')).toContainText('补入 180 张');
+  const calls=[];
+  page.on('request',req=>{if(req.url().endsWith('/api/feedback'))calls.push(req.postDataJSON());});
+  const rejected=page.waitForResponse(response=>response.url().endsWith('/api/feedback'));
+  await page.locator('#submitButton').click();
+  expect((await rejected).status()).toBe(400);
+  expect(await receipt(request)).toBeNull();
+  expect((await exported(page)).photos[0].note).toHaveLength(4000);
+  await expect(page.locator('#submitButton')).toHaveText('提交评价');
+  await expect(page.locator('#submissionStatus')).toContainText('4 MiB');
+  await expect(page.locator('#handoffButton')).toBeDisabled();
+  await page.screenshot({path:testInfo.outputPath('rejection-desktop.png')});
+  await page.setViewportSize({width:390,height:844});
+  await page.screenshot({path:testInfo.outputPath('rejection-mobile.png'),fullPage:true});
+  await page.setViewportSize({width:1440,height:960});
+  await ready(page);
+  await expect(page.locator('#submitButton')).toHaveText('提交评价');
+  await expect(page.locator('#note')).toHaveValue('\u0000'.repeat(4000));
+  for (let index=0;index<10;index++) {
+    await page.locator('#note').fill('');
+    await page.locator('#nextButton').click();
+  }
+  await page.locator('#submitButton').click();
+  await expect(page.locator('#submissionStatus')).toContainText('已提交');
+  expect(calls).toHaveLength(2);
+  expect(calls[1].submissionId).not.toBe(calls[0].submissionId);
+  const saved=await receipt(request);
+  expect(saved.photos.slice(0,10).every(row=>row.note === '')).toBeTruthy();
+  expect(saved.photos[10].note).toHaveLength(4000);
+});
+
+test('an authorization rejection during retry preserves the already-saved uncertain snapshot',async({page,request})=>{
+  await ready(page);
+  const calls=[];
+  page.on('request',req=>{if(req.url().endsWith('/api/feedback'))calls.push(req.postDataJSON());});
+  await page.route('**/api/feedback',async route=>{
+    const response=await route.fetch();
+    expect(response.ok()).toBeTruthy();
+    await route.abort('failed');
+  },{times:1});
+  await page.locator('#note').fill('TEST: first snapshot saved with lost acknowledgment');
+  await page.locator('#submitButton').click();
+  await expect(page.locator('#submissionStatus')).toContainText('未确认');
+  const first=await receipt(request);
+  await page.locator('#note').fill('TEST: newer unsubmitted draft');
+  // Restart after the retry refreshes its token but before POST reaches the
+  // real service. The old snapshot exists; only this retry is rejected.
+  await page.route('**/api/feedback',async route=>{
+    const port=server.address().port;
+    await stop();
+    await start(port);
+    const response=await route.fetch();
+    expect(response.status()).toBe(403);
+    await route.fulfill({response});
+  },{times:1});
+  await page.locator('#submitButton').click();
+  await expect(page.locator('#submissionStatus')).toContainText('未确认');
+  await expect(page.locator('#submitButton')).toHaveText('重试提交');
+  await expect(page.locator('#handoffButton')).toBeDisabled();
+  expect((await receipt(request)).submissionId).toBe(first.submissionId);
+  await ready(page);
+  await expect(page.locator('#note')).toHaveValue('TEST: newer unsubmitted draft');
+  await page.locator('#submitButton').click();
+  await expect(page.locator('#submissionStatus')).toContainText('尚未提交');
+  expect(calls).toHaveLength(3);
+  expect(calls[1]).toEqual(calls[0]);
+  expect(calls[2]).toEqual(calls[0]);
+  expect((await receipt(request)).submissionId).toBe(first.submissionId);
+});
+
 test('an uncertain submission survives page and server restart without changing retry identity',async({page,request})=>{
   await ready(page);
   let sent;
