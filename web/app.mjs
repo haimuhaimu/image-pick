@@ -5,7 +5,7 @@ const labels={selected:'精选',rework:'返修',reject:'淘汰',unreviewed:'未�
 const THEME_KEY='image-pick:theme:v1';
 const clamp=(value,min,max)=>Math.min(max,Math.max(min,value));
 let album=null,token=null,receipt=null,reviews=[],currentId=null,group=null,status='all';
-let reviewContext=null,scope='current';
+let reviewContext=null,scope='current',lastCurrentView=null;
 let storageSeen=null,storageFailed=false,storageMessage='',externalConflict=null,pendingSubmission=null,sending=false,submissionError='';
 let comparing=false,comparisonRole='reference',faceMode=false,zoom=1,pan=[0,0],toastTimer;
 const viewports=[
@@ -224,6 +224,13 @@ function selectPhoto(id) {
   render();
   document.querySelector('.review-panel').scrollTop=0;
 }
+function returnToCurrent() {
+  if(!reviewContext) return;
+  scope='current';status='all';
+  const saved=lastCurrentView&&reviewContext.currentPhotoIds.includes(lastCurrentView.photoId)?lastCurrentView:null;
+  if(saved){comparing=saved.comparing;comparisonRole=saved.comparisonRole;}
+  selectPhoto(saved?.photoId??reviewContext.currentPhotoIds[0]);
+}
 function navigate(delta) {
   const id=adjacentId(filtered(),currentId,delta);
   if(id) selectPhoto(id);
@@ -384,7 +391,13 @@ function renderGroups() {
     $('groupTabs').replaceChildren(...Object.entries({current:'本轮',history:'历史',reference:'参考',all:'全部'}).map(([value,label])=>{
       const button=document.createElement('button');button.textContent=label;button.setAttribute('aria-pressed',String(value===scope));
       const count=document.createElement('span');count.textContent=scopedPhotos(value).length;button.append(count);
-      button.onclick=()=>{scope=value;status='all';currentId=filtered()[0]?.id??null;resetView();render();};return button;
+      button.onclick=()=>{
+        if(value==='current'){returnToCurrent();return;}
+        scope=value;status='all';
+        const photos=filtered();
+        if(!photos.some(photo=>photo.id===currentId))currentId=photos[0]?.id??null;
+        resetView();render();
+      };return button;
     }));
     $('statusFilter').disabled=scope!=='current';$('statusFilter').value=scope==='current'?status:'all';
     return;
@@ -424,6 +437,8 @@ function render() {
   $('comparisonRole').value=comparisonRole;
   $('comparisonRole').hidden=!comparing || options.length<2;
   if(!reference) comparing=false;
+  // Browsing a read-only version must not replace the current review position or comparison.
+  if(reviewContext&&photo&&canReview(photo.id))lastCurrentView={photoId:photo.id,comparing,comparisonRole};
   $('compareButton').disabled=!reference;
   $('compareButton').title=reference ? '与该图片对应的参照同时查看' : '这张图片没有指定参照';
   $('compareButton').setAttribute('aria-pressed',String(comparing));
@@ -480,7 +495,7 @@ $('issueTags').replaceChildren(...Object.entries(issueLabels).map(([id,label])=>
 }));
 $('statusFilter').onchange=event=>{status=event.target.value;currentId=filtered().some(photo=>photo.id === currentId) ? currentId : filtered()[0]?.id ?? null;resetView();render();};
 $('clearFilters').onclick=()=>{group=null;scope='current';status='all';$('statusFilter').value=status;currentId=filtered()[0]?.id??null;resetView();render();};
-$('returnCurrent').onclick=()=>{scope='current';status='all';selectPhoto(reviewContext.currentPhotoIds[0]);};
+$('returnCurrent').onclick=returnToCurrent;
 $('overviewButton').onclick=()=>{$('overviewGrid').replaceChildren(...album.photos.map(photo=>thumbnail(photo,true)));$('overview').showModal();};
 $('closeOverview').onclick=()=>$('overview').close();
 $('overview').onclick=event=>{
@@ -583,7 +598,7 @@ async function initialize() {
     const data=await fetchJSON('/api/album');
     if(!data.album || !Array.isArray(data.album.photos) || !data.album.photos.length || data.album.photos.length>500 || typeof data.token !== 'string')throw new Error('相册清单不完整。');
     if(data.album.photos.some(photo=>photo.url !== `/images/${photo.id}`))throw new Error('图片地址不属于本地相册。');
-    album=data.album;token=data.token;receipt=data.receipt;reviewContext=data.reviewContext??null;scope='current';
+    album=data.album;token=data.token;receipt=data.receipt;reviewContext=data.reviewContext??null;scope='current';lastCurrentView=null;
     $('album').classList.toggle('with-context',Boolean(reviewContext));
     // A historical image's own verdict comes before its earlier rework context.
     $('revisionCard').before($('historyCard'));

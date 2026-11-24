@@ -26,6 +26,96 @@ test.beforeEach(async()=>{
 });
 test.afterEach(async()=>{if(server)await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});await cleanup();});
 
+async function addSecondCurrentPhoto({currentFirst=false}={}) {
+  await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});
+  const old=await loadAlbum(f.manifest),previous=submission(old.album,'second-photo-feedback');
+  previous.photos[1].localVerdict='rework';previous.photos[1].note='第二张：保留构图，只去背景纹理。';
+  await saveReceipt(old.album,previous,f.reviews);
+  const manifestPath=join(f.dir,'next.json'),next=JSON.parse(await readFile(manifestPath,'utf8'));
+  next.photos.push({id:'second-new-photo',file:'second-new.png',title:'Second current image',comparisons:{previous:'photo-2',reference:'photo-3'}});
+  if(currentFirst)next.photos.unshift(next.photos.splice(next.photos.findIndex(photo=>photo.id==='new-photo'),1)[0]);
+  await writeFile(join(f.dir,'second-new.png'),png(24,32,160));
+  await writeFile(manifestPath,JSON.stringify(next));loaded=await loadAlbum(manifestPath);
+  const contextPath=join(f.dir,'context.json'),sidecar=JSON.parse(await readFile(contextPath,'utf8'));
+  sidecar.manifestDigest=loaded.album.manifestDigest;sidecar.currentPhotoIds.push('second-new-photo');
+  sidecar.history.push({photoId:'photo-2',manifest:'album.json',manifestDigest:old.album.manifestDigest,submissionId:'second-photo-feedback'});
+  sidecar.results.push({photoId:'second-new-photo',previousPhotoId:'photo-2',previousSubmissionId:'second-photo-feedback',summary:'第二张：已去背景纹理。'});
+  await writeFile(contextPath,JSON.stringify(sidecar));
+  context=await loadReviewContext({contextPath,manifestPath,album:loaded.album,reviewsDirectory:f.reviews});
+  server=createAlbumServer({...loaded,reviewsDirectory:f.reviews,reviewContext:context});
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});base=`http://127.0.0.1:${server.address().port}`;
+}
+
+test('return from previous feedback resumes the exact current image and comparison, without misattributing notes',async({page})=>{
+  await addSecondCurrentPhoto();await page.goto(base);
+  await page.locator('#note').fill('第一张的意见，请保留');
+  await page.locator('#filmstrip [data-photo-id="second-new-photo"]').click();
+  await page.locator('#note').fill('第二张复评草稿');
+  await page.locator('#comparisonRole').selectOption('reference');
+  await page.locator('#viewPrevious').click();
+  await expect(page.locator('#photoCode')).toHaveText('photo-2');
+  await expect(page.locator('#historyNote')).toHaveText('第二张：保留构图，只去背景纹理。');
+  await page.locator('#returnCurrent').click();
+  await expect(page.locator('#photoCode')).toHaveText('second-new-photo');
+  await expect(page.locator('#note')).toHaveValue('第二张复评草稿');
+  await expect(page.locator('#compareButton')).toHaveAttribute('aria-pressed','true');
+  await expect(page.locator('#comparisonRole')).toHaveValue('reference');
+  await expect(page.locator('#referenceCaption')).toHaveText('参考图 / photo-3');
+  await page.locator('#note').fill('第二张确认：纹理已去掉');
+  await page.locator('#submitButton').click();await expect(page.locator('#submissionStatus')).toContainText('已提交');
+  const {receipt}=await readFeedback(loaded.album,f.reviews);
+  expect(receipt.photos.find(row=>row.id==='new-photo').note).toBe('第一张的意见，请保留');
+  expect(receipt.photos.find(row=>row.id==='second-new-photo').note).toBe('第二张确认：纹理已去掉');
+  expect(receipt.photos.find(row=>row.id==='photo-2').note).toBe('');
+  await page.reload();await page.locator('#filmstrip [data-photo-id="second-new-photo"]').click();
+  await expect(page.locator('#note')).toHaveValue('第二张确认：纹理已去掉');
+});
+
+test('narrow touch scope tabs and overview return to the last current image without forcing comparison',async({browser},testInfo)=>{
+  await addSecondCurrentPhoto();
+  const mobile=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,colorScheme:'dark',reducedMotion:'reduce'}),page=await mobile.newPage();
+  try {
+    await page.goto(base);await page.locator('#filmstrip [data-photo-id="second-new-photo"]').tap();
+    await page.locator('#note').fill('第二张触摸复评');await page.locator('#singleButton').tap();
+    for(const scope of ['历史2','参考1','全部5']) {
+      await page.getByRole('button',{name:scope,exact:true}).tap();
+      await page.getByRole('button',{name:'本轮2',exact:true}).tap();
+      await expect(page.locator('#photoCode')).toHaveText('second-new-photo');
+      await expect(page.locator('#note')).toHaveValue('第二张触摸复评');
+      await expect(page.locator('#singleButton')).toHaveAttribute('aria-pressed','true');
+    }
+    await page.locator('#overviewButton').tap();await page.locator('#overview [data-photo-id="photo-2"]').tap();
+    await page.locator('#returnCurrent').tap();
+    await expect(page.locator('#photoCode')).toHaveText('second-new-photo');
+    await expect(page.locator('#note')).toHaveValue('第二张触摸复评');
+    await expect(page.locator('#singleButton')).toHaveAttribute('aria-pressed','true');
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.locator('#revisionCard').scrollIntoViewIfNeeded();await page.screenshot({path:testInfo.outputPath('multi-current-mobile.png')});
+  }finally{await mobile.close();}
+});
+
+test('all scope preserves the selected image when the manifest starts with a current image',async({page})=>{
+  await addSecondCurrentPhoto({currentFirst:true});await page.goto(base);
+  await page.locator('#filmstrip [data-photo-id="second-new-photo"]').click();
+  await page.locator('#comparisonRole').selectOption('reference');
+  await page.getByRole('button',{name:'全部5',exact:true}).click();
+  await expect(page.locator('#photoCode')).toHaveText('second-new-photo');
+  await page.getByRole('button',{name:'本轮2',exact:true}).click();
+  await expect(page.locator('#photoCode')).toHaveText('second-new-photo');
+  await expect(page.locator('#comparisonRole')).toHaveValue('reference');
+  await expect(page.locator('#compareButton')).toHaveAttribute('aria-pressed','true');
+  await page.locator('#viewPrevious').click();
+  await page.getByRole('button',{name:'全部5',exact:true}).click();
+  await expect(page.locator('#photoCode')).toHaveText('photo-2');
+  await page.locator('#returnCurrent').click();
+  await expect(page.locator('#photoCode')).toHaveText('second-new-photo');
+  await expect(page.locator('#comparisonRole')).toHaveValue('reference');
+  await page.getByRole('button',{name:'全部5',exact:true}).click();
+  await page.locator('#filmstrip [data-photo-id="new-photo"]').click();
+  await page.locator('#viewPrevious').click();await page.locator('#returnCurrent').click();
+  await expect(page.locator('#photoCode')).toHaveText('new-photo');
+});
+
 test('current round opens alone with pinned feedback, history is read-only and draft survives return and reload',async({page})=>{
   await page.goto(base);
   await expect(page.locator('#filmstrip .thumb')).toHaveCount(1);
