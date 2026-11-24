@@ -28,6 +28,13 @@ For an actual agent revision, follow [the exact-version handoff instructions](./
 
 Rerunning the command reuses identical files and preserves submitted reviews; it is not a reset. If a generated image, manifest or context was changed, startup refuses the mismatch instead of overwriting it or silently creating a new history identity. Keep that directory. To isolate disk receipts, use a separate checkout or call the exported `generateRereviewDemo(newEmptyDirectory)` helper and launch `serve` with the returned paths. A new folder alone does not isolate browser drafts: the demo has the same album identity and fingerprint. For a completely fresh experience, also use a browser session without an existing draft (such as a new private session) or a different, unused port. Do not delete old reviews or drafts just to clear an error.
 
+For example, run these two commands from the checkout root to use a separate `.image-pick/rereview-second` folder. Choose another folder name if you already used it: repeating these commands resumes that folder rather than clearing it. Open the printed URL in a new private browser session if you want no previous browser draft.
+
+```sh
+node --input-type=module -e "import {generateRereviewDemo} from './scripts/demo.mjs'; console.log(await generateRereviewDemo('.image-pick/rereview-second'));"
+node bin/image-pick.mjs serve .image-pick/rereview-second/album.json --context .image-pick/rereview-second/context.json --reviews .image-pick/rereview-second/reviews --port 0
+```
+
 This is separate from `npm run demo` and `npm run demo:handoff`. No private images, model key, telemetry, public hosting or automatic agent wake-up are involved. Browser-emulated touch checks are not physical-phone certification.
 
 ## 中文体验步骤
@@ -41,3 +48,5 @@ This is separate from `npm run demo` and `npm run demo:handoff`. No private imag
 5. 提交后可查看“交给 AI 继续”的准确回执编号和版本指纹；`feedback` 命令可读出真实提交。本演示到交接检查为止，不会自动返修，也不冒充实际 AI 调用。
 
 页面里的“合成示例意见”是虚构的上一轮，不是你以前说过的话；“本轮处理说明”也不是你的验收结论。旧图、新图、两轮回执各自保留。生成文件被修改时会停止，不会覆盖。独立目录只隔离磁盘回执；相同端口仍可能恢复浏览器旧草稿。如需全新体验，保留旧目录和评价，另开空目录，并使用没有旧草稿的浏览器会话（如新的隐私窗口）或不同的未使用端口。
+
+另开目录可在仓库根目录运行上面 `rereview-second` 的两条命令，再用新的隐私窗口打开打印的网址。若这个目录以前用过，换一个目录名，并同步替换两条命令中的目录路径；重复运行不是清空或重置。
