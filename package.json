@@ -24,6 +24,7 @@
     "docs/assets",
     "docs/contract.md",
     "docs/integrations.md",
+    "docs/rereview-demo.md",
     "docs/verification.md"
   ],
   "scripts": {
@@ -31,6 +32,7 @@
     "test:browser": "playwright test",
     "demo": "node scripts/demo.mjs && node bin/image-pick.mjs serve .image-pick/demo/album.json",
     "demo:handoff": "node scripts/demo.mjs --handoff && node bin/image-pick.mjs serve .image-pick/handoff-demo/album.json",
+    "demo:rereview": "node scripts/demo.mjs --rereview && node bin/image-pick.mjs serve .image-pick/rereview-demo/album.json --context .image-pick/rereview-demo/context.json --reviews .image-pick/rereview-demo/reviews",
     "check": "npm test && npm run test:browser"
   },
   "repository": {

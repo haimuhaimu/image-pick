@@ -7,6 +7,7 @@ import {loadReviewContext} from '../src/review-context.mjs';
 import {saveReceipt,readFeedback} from '../src/review-store.mjs';
 import {createAlbumServer} from '../src/server.mjs';
 import {draftKey,makeLocalState} from '../web/model.mjs';
+import {generateRereviewDemo} from '../scripts/demo.mjs';
 
 let f,server,base,cleanup,loaded,context;
 test.beforeEach(async()=>{
@@ -25,6 +26,50 @@ test.beforeEach(async()=>{
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});base=`http://127.0.0.1:${server.address().port}`;
 });
 test.afterEach(async()=>{if(server)await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});await cleanup();});
+
+for(const narrow of [false,true])test(`generated rereview demo preserves real new feedback and read-only example history (${narrow?'narrow touch':'desktop'})`,async({browser},testInfo)=>{
+  await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});
+  const demo=await generateRereviewDemo(join(f.dir,'public-demo'));
+  loaded=await loadAlbum(demo.manifestPath);context=await loadReviewContext({...demo,album:loaded.album});
+  const old=await loadAlbum(join(f.dir,'public-demo','album-v1.json'));
+  const before=await readFeedback(old.album,demo.reviewsDirectory);
+  server=createAlbumServer({...loaded,reviewsDirectory:demo.reviewsDirectory,reviewContext:context});
+  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+  const browserContext=await browser.newContext(narrow?{viewport:{width:390,height:844},isMobile:true,hasTouch:true,colorScheme:'dark',reducedMotion:'reduce'}:{viewport:{width:1440,height:960}});
+  const page=await browserContext.newPage(),activate=async locator=>narrow?locator.tap():locator.click();
+  try {
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    await expect(page.locator('#filmstrip .thumb')).toHaveCount(2);
+    await expect(page.locator('#note')).toHaveValue('');
+    await activate(page.locator('#filmstrip [data-photo-id="triangle-new"]'));
+    await expect(page.locator('#revisionCard')).toContainText('合成示例意见');
+    await page.locator('#comparisonRole').selectOption('reference');
+    await page.locator('#note').fill('我的本轮评价：三角还没有变成暖金色');
+    await activate(page.locator('[data-verdict="rework"]'));
+    await activate(page.locator('#viewPrevious'));
+    await expect(page.locator('#note')).toBeHidden();
+    await expect(page.locator('#historyNote')).toContainText('合成示例意见');
+    await activate(page.locator('#returnCurrent'));
+    await expect(page.locator('#photoCode')).toHaveText('triangle-new');
+    await expect(page.locator('#note')).toHaveValue('我的本轮评价：三角还没有变成暖金色');
+    await expect(page.locator('#comparisonRole')).toHaveValue('reference');
+    await activate(page.locator('#submitButton'));await expect(page.locator('#submissionStatus')).toContainText('已提交');
+    const {receipt}=await readFeedback(loaded.album,demo.reviewsDirectory);
+    expect(receipt.photos.find(row=>row.id==='triangle-new').localVerdict).toBe('rework');
+    expect(receipt.photos.find(row=>row.id==='circle-new').localVerdict).toBeNull();
+    expect(receipt.photos.find(row=>row.id==='triangle-old').note).toBe('');
+    expect(await readFeedback(old.album,demo.reviewsDirectory)).toEqual(before);
+    await generateRereviewDemo(join(f.dir,'public-demo'));
+    await page.reload();await activate(page.locator('#filmstrip [data-photo-id="triangle-new"]'));
+    await expect(page.locator('#note')).toHaveValue('我的本轮评价：三角还没有变成暖金色');
+    await page.locator('#comparisonRole').selectOption('reference');
+    for(const id of ['currentImage','referenceImage'])await expect.poll(()=>page.locator(`#${id}`).evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);
+    await page.locator('#currentViewport').scrollIntoViewIfNeeded();
+    await page.screenshot({path:testInfo.outputPath('rereview-images.png')});
+    if(narrow)await page.locator('#revisionCard').scrollIntoViewIfNeeded();
+    await page.screenshot({path:testInfo.outputPath('rereview-demo.png')});
+  }finally{await browserContext.close();}
+});
 
 async function addSecondCurrentPhoto({currentFirst=false}={}) {
   await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});

@@ -1,7 +1,10 @@
-import { mkdir, writeFile, lstat } from 'node:fs/promises';
+import { mkdir, writeFile, lstat, open } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { deflateSync } from 'node:zlib';
+import { loadAlbum } from '../src/manifest.mjs';
+import { saveReceipt } from '../src/review-store.mjs';
 
 function chunk(type, data) {
   const bytes = Buffer.alloc(data.length + 12); bytes.writeUInt32BE(data.length); bytes.write(type, 4); data.copy(bytes, 8);
@@ -85,7 +88,61 @@ export async function generateHandoffDemo(directory='.image-pick/handoff-demo') 
   return manifest;
 }
 
+// A re-review example has exact historical bindings: changed files must not silently reseed it.
+async function createExact(path,value) {
+  const bytes=Buffer.isBuffer(value)?value:Buffer.from(value);
+  try {await writeFile(path,bytes,{flag:'wx',mode:0o600});return;}
+  catch(error){if(error.code!=='EEXIST')throw error;}
+  const handle=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+  try {
+    const info=await handle.stat();
+    if(!info.isFile()||info.size!==bytes.length||!(await handle.readFile()).equals(bytes))throw new Error('Rereview demo files have changed; keep this folder and use a new empty demo directory');
+  } finally {await handle.close();}
+}
+
+export async function generateRereviewDemo(directory='.image-pick/rereview-demo') {
+  const dir=resolve(directory);await mkdir(dir,{recursive:true,mode:0o700});
+  const info=await lstat(dir);
+  if(!info.isDirectory()||info.isSymbolicLink())throw new Error('Demo directory must be a real directory');
+  const warm=[201,165,94],cool=[120,133,166];
+  const definitions=[
+    {id:'circle-old',title:'圆 · 预置上一版',variant:0,options:{circleX:0.34,ink:warm}},
+    {id:'triangle-old',title:'三角 · 预置上一版',variant:2,options:{ink:cool}},
+    {id:'reference',title:'参考 · 暖金色',variant:3,options:{ink:warm}},
+    {id:'circle-new',title:'本轮 A · 看圆是否居中',variant:0,options:{ink:warm}},
+    {id:'triangle-new',title:'本轮 B · 配色请你复查',variant:2,options:{ink:cool}},
+  ];
+  for(const {id,variant,options} of definitions)await createExact(join(dir,`${id}.png`),geometricPng(720,900,variant,options));
+  const rows=definitions.map(({id,title})=>({id,file:`${id}.png`,title,baseline:'candidate'}));
+  const old={schemaVersion:1,id:'rereview-demo',revision:'1',title:'双图复评 · 合成示例（旧意见为预置，非你的评价）',photos:rows.slice(0,3)};
+  const json=value=>JSON.stringify(value,null,2)+'\n';
+  const oldPath=join(dir,'album-v1.json'),manifestPath=join(dir,'album.json'),contextPath=join(dir,'context.json'),reviewsDirectory=join(dir,'reviews');
+  await createExact(oldPath,json(old));
+  const {album:previous}=await loadAlbum(oldPath);
+  const notes={
+    'circle-old':'合成示例意见：把圆移回中间，保留暖金色和留白。',
+    'triangle-old':'合成示例意见：三角保持原位，只把蓝灰改成参考图的暖金色。',
+  };
+  const submissionId='synthetic-r1';
+  const next={...old,revision:'2',photos:[...rows.slice(0,3),
+    {...rows[3],comparisons:{previous:'circle-old',reference:'reference'}},
+    {...rows[4],comparisons:{previous:'triangle-old',reference:'reference'}},
+  ]};
+  await createExact(manifestPath,json(next));
+  const {album}=await loadAlbum(manifestPath);
+  const context={schemaVersion:1,albumId:album.id,manifestDigest:album.manifestDigest,currentPhotoIds:['circle-new','triangle-new'],
+    history:Object.keys(notes).map(photoId=>({photoId,manifest:'album-v1.json',manifestDigest:previous.manifestDigest,submissionId})),
+    results:[
+      {photoId:'circle-new',previousPhotoId:'circle-old',previousSubmissionId:submissionId,summary:'固定几何演示：圆已移到中间。请对照旧意见，再决定是否接受。没有调用模型。'},
+      {photoId:'triangle-new',previousPhotoId:'triangle-old',previousSubmissionId:submissionId,summary:'固定几何演示：保留了三角与留白，配色尚未改为暖金。处理说明不代表验收通过。'},
+    ]};
+  await createExact(contextPath,json(context));
+  await saveReceipt(previous,{schemaVersion:1,albumId:previous.id,manifestDigest:previous.manifestDigest,submissionId,
+    photos:previous.photos.map(({id})=>({id,localVerdict:notes[id]?'rework':null,note:notes[id]??'',statusUpdatedAt:null,noteUpdatedAt:null}))},reviewsDirectory);
+  return {manifestPath,contextPath,reviewsDirectory};
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const generate=process.argv[2] === '--handoff' ? generateHandoffDemo : generateDemo;
-  generate().then(path => process.stdout.write(`${path}\n`)).catch(error => { process.stderr.write(`Demo generation failed: ${error.code ?? error.message}\n`); process.exitCode = 1; });
+  const generate=process.argv[2] === '--rereview' ? generateRereviewDemo : process.argv[2] === '--handoff' ? generateHandoffDemo : generateDemo;
+  generate().then(result => process.stdout.write(`${typeof result==='string'?result:JSON.stringify(result)}\n`)).catch(error => { process.stderr.write(`Demo generation failed: ${error.code ?? error.message}\n`); process.exitCode = 1; });
 }
