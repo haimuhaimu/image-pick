@@ -70,6 +70,8 @@ npm run demo
 
 用 `npm run demo:handoff` 可以体验「来源图／上一版／参考图 → 标返修和问题标签 → 提交 → 交给 AI」；演示素材和记录都与原来的 demo 分开。
 
+**不写配置也能试第二轮复评：**运行 `npm run demo:rereview`。两张本轮几何图旁边会显示明确标注的预置示例意见，其中一张故意没有改完。你可以对照、评价、回看历史，再回到原来的那张新图。你的提交会真实保存在本机；预置旧意见是虚构示例，不代表你以前说过或认可过。再次启动会保留这些记录。详见[五分钟体验步骤](./docs/rereview-demo.md#中文体验步骤)。
+
 再次复审时，可以用可选的 `serve --context` 配置把「本轮待评」和「只读历史」分开，并在返修卡上并列展示上次的准确反馈与本轮处理说明。处理说明不代表人工验收通过，原图、旧清单和历史回执均保留。见[复审配置](./docs/integrations.md#open-a-re-review-with-history)。
 
 仓库已经包含可复用的 [ImagePick Skill](./skills/image-pick/SKILL.md) 和本地 CLI。兼容的 Harness 只需要能执行本地命令、访问同一组文件，并为评审者提供浏览器。ImagePick 不绑定模型 SDK，也不依赖专有画布。
@@ -162,7 +164,7 @@ Skill 使用通用 `.agents/skills` 约定，并调用同一套本地 CLI。
 
 ## 当前验证状态
 
-ImagePick v0.1 已在 Node.js 22 下通过 **38 项核心测试和 10 项真实浏览器测试**。覆盖草稿隔离、响应丢失重试、多标签页冲突、图片版本变化、损坏回执、大小写 ID，以及真实 JPEG/WebP 解码。GitHub Actions 会在 Linux 上重复执行整套检查。
+当前测试覆盖草稿隔离、响应丢失重试、多标签页冲突、图片版本变化、损坏回执、大小写 ID、真实 JPEG/WebP 解码和多图复评。GitHub Actions 使用 Linux、Node.js 22 运行当前整套检查；请查看你所用提交对应的结果。[验证记录](./docs/verification.md)按日期区分本地验证和历史结果，不把旧测试数量当成后续版本的通过保证。
 
 ```sh
 npm ci

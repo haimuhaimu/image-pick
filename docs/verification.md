@@ -1,5 +1,17 @@
 # Verification
 
+## Runnable re-review demo — 2026-11-24
+
+The public `demo:rereview` command packages the existing re-review workflow with original geometric images and explicitly labeled fictional earlier feedback. It does not certify a live AI revision or automatic host integration.
+
+- Local Node.js 26.5.0 / macOS arm64: `npm test` passed 65 tests; Playwright/Chromium passed 25 browser tests. GitHub CI runs separately on Linux/Node.js 22; consult the actual commit checks.
+- Generator checks cover two current images and exact historical bindings, a deliberately unchanged example, blank new feedback, repeated startup preserving all generated and receipt bytes, and refusing changed files/symbolic links. A Unix named-pipe regression first reproduced a blocked startup, then confirmed rejection without waiting for a writer; this platform-specific check is skipped on Windows.
+- The browser opens the actual generated demo, reviews its second image, switches comparison, reads old feedback, returns, submits and reloads. The new receipt and the unchanged historical receipt are checked on disk, not inferred from a toast.
+- Desktop 1440×960 and emulated touch 390×844/dark/reduced-motion screenshots were inspected. Image decode is awaited before captures. No physical-phone acceptance is claimed.
+- Original demo and handoff demo remain separate. No personal images or real user history were used. The old feedback is seeded fiction; new opinions are only recorded after an explicit submission.
+
+Run `npm run check` to reproduce the suite and `npm run demo:rereview` for the [walkthrough](./rereview-demo.md). Dated counts describe this checked version, not every future checkout.
+
 ## Local feedback-handoff preview — 2026-11-18
 
 This is local verification of the extension, not a release or a current GitHub CI result. Tests used synthetic images and simulated review feedback only; no personal albums or historical user receipts were copied into fixtures.

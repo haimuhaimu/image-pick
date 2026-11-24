@@ -72,6 +72,8 @@ To continue a revision, click **交给 AI 继续** after submitting and paste th
 
 Run `npm run demo:handoff` for a separate synthetic source / previous / reference comparison demo with issue tags and the submitted-feedback handoff.
 
+**Try a second review round without writing configuration:** run `npm run demo:rereview`. Two new geometric images open beside explicitly labeled, preloaded example feedback. One example is intentionally unfinished: compare it, mark your own verdict, inspect history, and return to the same current image. Your submitted feedback is real local data; the seeded old feedback is fictional, not an earlier opinion of yours. Restarting preserves both. See the [five-minute walkthrough](./docs/rereview-demo.md).
+
 For another review round, an optional `serve --context` sidecar separates current images from read-only history and shows the exact earlier feedback beside a processing summary. The summary is not human acceptance; original images, manifests and receipts stay intact. See [re-review setup](./docs/integrations.md#open-a-re-review-with-history).
 
 The repository includes a reusable [ImagePick Skill](./skills/image-pick/SKILL.md) and a local CLI. A compatible harness needs local command execution, access to the same files, and a browser for the reviewer. ImagePick is not tied to a model SDK or proprietary canvas.
@@ -164,7 +166,7 @@ Read the full [security model](./SECURITY.md).
 
 ## Verification
 
-ImagePick v0.1 is tested on Node.js 22 with **38 core tests and 10 real-browser tests**. Coverage includes draft isolation, lost-response retry, cross-tab conflicts, image version changes, corrupted receipts, case-sensitive IDs, and actual JPEG/WebP decoding. GitHub Actions repeats the suite on Linux.
+Coverage includes draft isolation, lost-response retry, cross-tab conflicts, image version changes, corrupted receipts, case-sensitive IDs, actual JPEG/WebP decoding, and multi-image re-review. GitHub Actions runs the current suite on Linux with Node.js 22; check the result for the commit you use. Dated local and historical results are recorded in [verification](./docs/verification.md), not presented as a guarantee for future versions.
 
 ```sh
 npm ci
